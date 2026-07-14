@@ -64,6 +64,13 @@ jobs:
         with:
           path: releases
 
+      - name: Clean old releases
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME:-latest}"
+          gh release delete "$tag" --cleanup-tag || true
+
       - name: Create GitHub Release & Upload
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
