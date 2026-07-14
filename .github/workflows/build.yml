@@ -36,7 +36,7 @@ jobs:
             xz-utils icnsutils graphicsmagick
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install
 
       - name: Build Windows
         if: runner.os == 'Windows'
