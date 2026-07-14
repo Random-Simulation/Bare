@@ -38,7 +38,7 @@ jobs:
         run: npm install
 
       - name: Build
-        run: npx electron-builder@26.15.6 ${{ matrix.os == 'windows-latest' && '--win' || matrix.os == 'macos-latest' && '--mac' || '--linux' }}
+        run: npx electron-builder@26.15.6 ${{ matrix.os == 'windows-latest' && '--win' || matrix.os == 'macos-latest' && '--mac' || '--linux' }} --publish=never
 
       - name: Upload artifacts
         if: always()
