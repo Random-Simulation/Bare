@@ -1,0 +1,45 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'          # Trigger on tags like v1.0.0
+  workflow_dispatch:  # Allow manual trigger from GitHub UI
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows .exe
+        run: npm run build:win
+
+      - name: Create GitHub Release & Upload
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if (-not $tag) { $tag = "latest" }
+          
+          $exePath = Get-ChildItem -Path "dist" -Filter "*.exe" -ErrorAction SilentlyContinue
+          if (-not $exePath) { $exePath = Get-ChildItem -Path "dist" -Filter "Bare.exe" }
+          
+          if ($exePath) {
+            gh release create $tag $exePath --generate-notes --title "Release $tag"
+          } else {
+            Write-Host "No .exe found in dist/"
+            Get-ChildItem -Path "dist" -Recurse
+            exit 1
+          }
