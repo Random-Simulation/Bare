@@ -32,36 +32,13 @@ jobs:
             libx11-xcb1 libxkbcommon-x11-0 libgtk-3-0 \
             libdrm2 libgbm1 libasound2 libxss1 \
             libnss3 libxcomposite1 libxdamage1 libxrandr2 \
-            fonts-liberation libappindicator3-1 \
-            xz-utils
+            fonts-liberation libappindicator3-1 xz-utils
 
       - name: Install dependencies
         run: npm install
 
-      - name: Build Windows
-        if: runner.os == 'Windows'
-        run: npm run build:win
-
-      - name: Build macOS
-        if: runner.os == 'macOS'
-        run: npm run build:mac
-
-      - name: Build Linux
-        if: runner.os == 'Linux'
-        run: npm run build:linux
-
-      - name: List dist contents
-        if: always()
-        run: |
-          echo "=== dist/ contents ==="
-          if [ -d "dist" ]; then
-            ls -la dist/
-            find dist -maxdepth 2 -type f | head -30
-          else
-            echo "dist/ folder does not exist"
-            echo "=== node_modules/.cache ==="
-            ls -la node_modules/.cache/ 2>/dev/null || echo "no cache"
-          fi
+      - name: Build
+        run: npx electron-builder@26.15.6 ${{ matrix.os == 'windows-latest' && '--win' || matrix.os == 'macos-latest' && '--mac' || '--linux' }}
 
       - name: Upload artifacts
         if: always()
@@ -81,9 +58,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: releases
-
-      - name: List downloaded files
-        run: find releases -type f
 
       - name: Create GitHub Release & Upload
         env:
