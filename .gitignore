@@ -10,7 +10,7 @@ bare.json.backup
 session.json
 full_session.json
 system-prompt-addition.md
-tool-plugin-template.js
+# Note: tool-plugin-template.js is intentionally NOT ignored — it's bundled and copied to AppData on first launch
 
 # Environment
 .env

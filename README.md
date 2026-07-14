@@ -1,6 +1,6 @@
 # Bare
 
-A minimal agentic desktop harness. Connects to a local LLM and autonomously reads, writes, edits files, runs shell commands, and searches the web.
+A super minimal agentic desktop harness. Connects to a local LLM and autonomously reads, writes, edits files, runs shell commands, and searches the web.
 
 ## What it does
 
