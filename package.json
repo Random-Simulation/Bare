@@ -1,0 +1,63 @@
+{
+  "name": "bare",
+  "version": "1.0.0",
+  "description": "Bare Agentic Harness",
+  "author": "Bare",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win",
+    "build:win": "electron-builder --win",
+    "build:mac": "electron-builder --mac",
+    "build:linux": "electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.bare.app",
+    "productName": "Bare",
+    "icon": "icon.png",
+    "electronLanguages": ["en-US"],
+    "files": [
+      "**/*",
+      "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!tests/**/*"
+    ],
+    "win": {
+      "target": {
+        "target": "portable",
+        "arch": [
+          "x64"
+        ]
+      }
+    },
+    "portable": {
+      "artifactName": "${productName}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "artifactName": "${productName}-${os}-${version}.${ext}"
+    },
+    "linux": {
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "artifactName": "${productName}-${os}-${version}.${ext}"
+    }
+  },
+  "dependencies": {
+    "chokidar": "^5.0.0",
+    "katex": "^0.17.0",
+    "marked": "^18.0.5"
+  },
+  "devDependencies": {
+    "electron": "^43.0.0",
+    "electron-builder": "^26.15.3"
+  }
+}

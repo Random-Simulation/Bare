@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# User data (settings, sessions — never commit these)
+bare.json
+bare.json.backup
+session.json
+full_session.json
+system-prompt-addition.md
+tool-plugin-template.js
+
+# Environment
+.env
+
+# OS junk
+.DS_Store
+Thumbs.db
+$null
+ehthumbs.db
+
+# Logs
+*.log
+
+# VS Code / IDE
+.vscode/
+.idea/

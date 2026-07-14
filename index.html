@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+<head>
+<!-- Sync theme from query param before any CSS is parsed -->
+<script>
+(function() {
+  var q = window.location.search;
+  var m = q.match(/theme=([^&]+)/);
+  if (m && m[1] === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+  }
+})();
+</script>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>bare</title>
+<!-- Critical theme variables inline to prevent FOUC before stylesheet loads -->
+<style>
+:root { --bg: #fff; --surface: #f5f5f5; --text: #111111; --text-sec: #555555; --border: #ddd; --muted: #aaa; }
+[data-theme="dark"] { --bg: #0d0d0d; --surface: #1a1a1a; --text: #f5f5f5; --text-sec: #c0c0c0; --border: #2a2a2a; --muted: #4a4a4a; }
+body { background: var(--bg); color: var(--text); }
+#prompt-wrapper { background: var(--surface); }
+.preload * { transition: none !important; }
+</style>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body class="preload">
+
+<div id="bar">
+  <button id="settings-btn" title="Settings"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M10.325 4.317c.426 -1.756 2.924 -1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543 -.94 3.31 .826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756 .426 1.756 2.924 0 3.35a1.724 1.724 0 0 0 -1.066 2.573c.94 1.543 -.826 3.31 -2.37 2.37a1.724 1.724 0 0 0 -2.572 1.065c-.426 1.756 -2.924 1.756 -3.35 0a1.724 1.724 0 0 0 -2.573 -1.066c-1.543 .94 -3.31 -.826 -2.37 -2.37a1.724 1.724 0 0 0 -1.065 -2.572c-1.756 -.426 -1.756 -2.924 0 -3.35a1.724 1.724 0 0 0 1.066 -2.573c-.94 -1.543 .826 -3.31 2.37 -2.37.66 .404 1.494 .397 2.572 -1.065z" /><path d="M9 12a3 3 0 0 0 6 0a3 3 0 0 0 -6 0" /></svg></button>
+</div>
+<div id="settings-overlay" class="overlay-hidden">
+  <div id="settings-modal">
+    <button id="settings-close" class="settings-close-btn" title="Close"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6L6 18"/><path d="M6 6l12 12"/></svg></button>
+    <div id="settings-content">
+      <div class="settings-section">
+        <h3 class="settings-heading">Safety</h3>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Read-only mode <kbd class="shortcut-badge">Ctrl+Shift+R</kbd></label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="read-only-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">Disables bash, write, and edit tools entirely. Only read, websearch, and finish_task are available.</p>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Restrict Bare to current working directory <kbd class="shortcut-badge">Ctrl+Shift+W</kbd></label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="restrict-workdir-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">When enabled, Bare will only be able to read/write files and run commands within the selected working directory.</p>
+        <p class="settings-warning" id="workdir-warning" style="display:none">⚠ Warning: Disabling this setting allows Bare to work anywhere on your computer.</p>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Require permission for tool actions</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="require-perm-toggle" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">Bare will ask before running bash, write, or edit. Click "Allow All Tools" on any prompt to disable this.</p>
+        <p class="settings-warning" id="perm-warning" style="display:none">⚠ Warning: Disabling this allows Bare to run all tools without asking. This includes running system commands and writing, editing and deleting files anywhere on your computer.</p>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-heading">Appearance</h3>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Dark Mode</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="theme-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">Change the theme.</p>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Verbose Mode <kbd class="shortcut-badge">Ctrl+Shift+V</kbd></label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="verbose-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">Shows a full log of everything Bare is doing, all thoughts+tools. <em>Takes effect after the agent finishes generating.</em></p>
+        <div class="settings-field settings-toggle-row">
+          <label class="settings-label">Activate BARE mode <kbd class="shortcut-badge">Ctrl+Shift+B</kbd></label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="bare-mode-toggle">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <p class="settings-hint">Removes all UI elements. The interface becomes… bare. Minimalism perfected.</p>
+      </div>
+
+      <div class="settings-section">
+        <h3 class="settings-heading">Connection</h3>
+
+        <div class="connection-row">
+          <div class="settings-field connection-field-server">
+            <label class="settings-label">Server</label>
+            <div class="custom-select" id="server-type-select">
+              <button type="button" class="custom-select-btn settings-input" data-select="server-type">
+                <span class="custom-select-label">LlamaCPP</span>
+                <span class="select-arrow">▾</span>
+              </button>
+              <div class="custom-select-dropdown">
+                <div class="custom-select-option" data-value="llamacpp" data-select="server-type">LlamaCPP</div>
+                <div class="custom-select-option" data-value="ollama" data-select="server-type">Ollama</div>
+                <div class="custom-select-option" data-value="vllm" data-select="server-type">vLLM</div>
+                <div class="custom-select-option" data-value="lmstudio" data-select="server-type">LMStudio</div>
+                <div class="custom-select-option" data-value="custom" data-select="server-type">Custom</div>
+              </div>
+            </div>
+          </div>
+          <div class="settings-field connection-field-host">
+            <label class="settings-label">Host</label>
+            <input type="text" id="server-host" class="settings-input" value="127.0.0.1" placeholder="127.0.0.1">
+          </div>
+          <div class="settings-field connection-field-port">
+            <label class="settings-label">Port</label>
+            <input type="text" id="server-port" class="settings-input" value="8080">
+          </div>
+        </div>
+
+        <div class="settings-field">
+          <label class="settings-label">Model</label>
+          <div class="custom-select custom-select-wide" id="model-select-wrapper">
+            <button type="button" class="custom-select-btn settings-input" data-select="model">
+              <span class="custom-select-label">Select model</span>
+              <span class="select-arrow">▾</span>
+            </button>
+            <div class="custom-select-dropdown"></div>
+          </div>
+        </div>
+
+        <div class="connection-actions">
+          <button id="test-connection-btn" class="settings-action-btn" title="Test connection and load models">
+            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1 -5.93 -9.14"/><polyline points="22 4 12 13.5 16 17.5"/></svg>
+            Test Connection
+          </button>
+          <span id="connection-status" class="connection-status"></span>
+        </div>
+      </div>
+    </div>
+    <button id="save-settings-btn" class="settings-save-btn">Save</button>
+  </div>
+</div>
+<div id="chat"></div>
+<div id="input-area">
+  <div id="toast-container"></div>
+  <div id="prompt-row">
+    <button id="folder-btn" title="Choose working directory"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></button>
+    <div id="prompt-wrapper">
+      <textarea id="prompt" rows="1" autofocus></textarea>
+    </div>
+    <button id="new-session-btn" title="New session"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/><path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/><path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/></svg></button>
+  </div>
+</div>
+
+
+
+<script>
+  window.addEventListener('DOMContentLoaded', () => {
+    document.body.classList.remove('preload');
+  });
+</script>
+<script src="toast.js"></script>
+<script src="ctx-bar.js"></script>
+<script src="./node_modules/marked/lib/marked.umd.js"></script>
+<link rel="stylesheet" href="./node_modules/katex/dist/katex.min.css">
+<script src="./node_modules/katex/dist/katex.min.js"></script>
+<script src="./node_modules/katex/dist/contrib/auto-render.min.js"></script>
+<script type="module" src="renderer.js"></script>
+</body>
+</html>
