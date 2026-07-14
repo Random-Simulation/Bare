@@ -69,7 +69,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF_NAME:-latest}"
-          files=$(find releases -type f)
+          files=$(find releases -type f \( -name "*.exe" -o -name "*.dmg" -o -name "*.AppImage" \))
+          echo "Uploading: $files"
           gh release create "$tag" \
             --generate-notes \
             --title "Release $tag" \
