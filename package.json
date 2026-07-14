@@ -33,10 +33,7 @@
       "artifactName": "${productName}.${ext}"
     },
     "mac": {
-      "target": {
-        "target": "dmg",
-        "arch": ["universal"]
-      },
+      "target": "dmg",
       "artifactName": "${productName}-${os}-${version}.${ext}"
     },
     "linux": {

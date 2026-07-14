@@ -21,19 +21,19 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: 20
           cache: 'npm'
 
       - name: Install Linux dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y \
+          sudo apt-get install -y --no-install-recommends \
             libx11-xcb1 libxkbcommon-x11-0 libgtk-3-0 \
             libdrm2 libgbm1 libasound2 libxss1 \
             libnss3 libxcomposite1 libxdamage1 libxrandr2 \
             fonts-liberation libappindicator3-1 \
-            xz-utils icnsutils graphicsmagick
+            xz-utils
 
       - name: Install dependencies
         run: npm install
@@ -51,14 +51,26 @@ jobs:
         run: npm run build:linux
 
       - name: List dist contents
-        run: ls -la dist/ || dir dist
+        if: always()
+        run: |
+          echo "=== dist/ contents ==="
+          if [ -d "dist" ]; then
+            ls -la dist/
+            find dist -maxdepth 2 -type f | head -30
+          else
+            echo "dist/ folder does not exist"
+            echo "=== node_modules/.cache ==="
+            ls -la node_modules/.cache/ 2>/dev/null || echo "no cache"
+          fi
 
       - name: Upload artifacts
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: builds-${{ matrix.os }}
           path: dist/
           retention-days: 7
+          if-no-files-found: ignore
 
   release:
     needs: build
@@ -69,6 +81,9 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: releases
+
+      - name: List downloaded files
+        run: find releases -type f
 
       - name: Create GitHub Release & Upload
         env:
