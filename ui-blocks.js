@@ -288,7 +288,10 @@ export function updateWriteBlock(block, content) {
 	block.lineCount = content.split("\n").length;
 
 	// 2. Always update the summary so the user sees progress
-	const fname = block.resolvedFilename || block.filePath.split(/[\\/]/).pop();
+	// Guard: both resolvedFilename and filePath can be null early in streaming
+	// (e.g. when id/name arrive before the path argument)
+	const fname = block.resolvedFilename
+		|| (block.filePath ? block.filePath.split(/[\\/]/).pop() : 'file');
 	block.summary.textContent = `Writing ${fname} - ${block.lineCount} lines`;
 
 	// 3. Only hit the DOM if the user is actively watching it stream
@@ -301,7 +304,10 @@ export function updateWriteBlock(block, content) {
 export function completeWriteBlock(block, content) {
 	block._rawContent = content; // Finalize memory
 	const lines = content.split("\n").length;
-	const fname = block.resolvedFilename || block.filePath.split(/[\\/]/).pop();
+	// Guard: both resolvedFilename and filePath can be null (rare, but possible
+	// if the path argument was never streamed or extraction failed)
+	const fname = block.resolvedFilename
+		|| (block.filePath ? block.filePath.split(/[\\/]/).pop() : 'file');
 
 	block.summary.textContent = `Wrote ${fname} - ${lines} lines`;
 	block.summary.classList.remove("pulsing");

@@ -62,11 +62,67 @@ export function capitalise(s) {
 	return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-/** Build assistant content, optionally prepending thinking tags */
+/* ------------------------------------------------------------------ */
+/* Token normalization                                                */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Normalize Gemma 4 `<|"|>` quote tokens to regular double-quotes.
+ * Gemma 4 emits tool call args like: {key:<|"|>value<|"|>}
+ * instead of: {key:"value"}
+ * llama.cpp passes the raw `<|"|>` tokens through, breaking JSON parsing.
+ *
+ * Safe to call on any model — no-op when the pattern is absent.
+ */
+export function normalizeGemmaTokens(str) {
+	if (typeof str !== 'string') return str;
+	return str.replace(/<\|"\|>/g, '"');
+}
+
+/* ------------------------------------------------------------------ */
+/* Reasoning tag definitions                                          */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Known reasoning/thinking tag pairs used by different models.
+ * Shared by sse-parser.js (stream splitting), message-builder.js (extraction),
+ * and buildAssistantContent (history building).
+ *
+ * - DeepSeek / Qwen / standard:  ... 
+ * - Gemma 4 primary:             <|channel>thought ... <channel|>
+ * - Gemma 4 alternate:           <|think|> ... <|/think|>
+ */
+export const REASONING_TAGS = [
+	{ open: '\u003c' + 'think' + '\u003e', close: '\u003c' + '/think' + '\u003e' },
+	{ open: '<|channel>thought', close: '<channel|>' },
+	{ open: '<|think|>', close: '<|/think|>' },
+];
+
+/**
+ * Check if text already contains native reasoning tags (any known format).
+ */
+export function hasNativeReasoningTags(text) {
+	if (!text) return false;
+	for (const tag of REASONING_TAGS) {
+		if (text.includes(tag.open)) return true;
+	}
+	return false;
+}
+
+/** Build assistant content, optionally prepending thinking tags.
+ * If thinkText already contains native reasoning tags (Gemma 4, etc.),
+ * preserves them as-is. Otherwise wraps in standard  tags. */
 export function buildAssistantContent(text, thinkText) {
 	const content = text || '';
+	const reasoning = thinkText || '';
+
+	if (reasoning && hasNativeReasoningTags(reasoning)) {
+		// Tags already embedded — return as-is
+		return reasoning + content;
+	}
+
 	return thinkText.trim()
-		? ` <think>\n${thinkText.trim()}\n</think>\n${content}`
+		? `  <think>\n${thinkText.trim()}\n</think>\n${content}`
 		: content;
 }
 

@@ -7,6 +7,26 @@ const isLinux = process.platform === 'linux';
 /** Human-readable OS name for system prompt */
 const OS_NAME = isWindows ? 'Windows' : isMac ? 'macOS' : 'Linux';
 
+/** Shell used by the bash tool — single source of truth */
+const SHELL = isWindows ? 'cmd.exe' : isMac ? 'zsh' : 'bash';
+
+/**
+ * Detect the user's default shell from environment.
+ * Windows: COMSPEC (usually cmd.exe). Falls back to SHELL.
+ * macOS/Linux: $SHELL (e.g., /bin/zsh, /bin/bash). Falls back to SHELL.
+ */
+function detectDefaultShell() {
+	if (isWindows) {
+		return process.env.COMSPEC?.replace(/\\/g, '/').split('/').pop() || SHELL;
+	}
+	// macOS / Linux
+	const shellPath = process.env.SHELL || '';
+	return shellPath.split('/').pop() || SHELL;
+}
+
+/** Shell name reported to the system prompt */
+const DEFAULT_SHELL = detectDefaultShell();
+
 /** Shared defaults — apply on every platform */
 const sharedDefaults = {
 	protectedPaths: [
@@ -125,8 +145,10 @@ function checkCommand(command) {
 	if (!isWindows && /(?:^|\s)\/(?:\s|$)/.test(normalized)) {
 		return 'Blocked: command targets filesystem root';
 	}
-	// Windows: standalone drive root like "c:\" or "c:" as a command argument
-	if (isWindows && /(?:^|\s)[a-z]:[\/\\]?(?:\s|$)/.test(normalized)) {
+	// Windows: standalone drive root like "c:\" or "c:/" as a command argument
+	// Must have a slash/backslash after the colon, and nothing more than whitespace/end after that.
+	// This avoids false positives on paths like "c:\users\..." or commands like "cd /d c:\..."
+	if (isWindows && /(?:^|\s)[a-z]:[\/\\](?:\s|$)/.test(normalized)) {
 		return 'Blocked: command targets drive root';
 	}
 
@@ -140,4 +162,4 @@ function checkCommand(command) {
 	return null;
 }
 
-module.exports = { load, checkPath, checkCommand, OS_NAME };
+module.exports = { load, checkPath, checkCommand, OS_NAME, SHELL, DEFAULT_SHELL };

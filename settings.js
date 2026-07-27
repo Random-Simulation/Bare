@@ -14,7 +14,7 @@ window.__settings = {
 	readOnly: false,
 	requireToolPermission: true,
 	bareMode: false,
-	verbose: false,
+	verbose: true,
 	workdirWarningDismissed: false,
 	permWarningDismissed: false,
 	restrictPromptDismissed: false,
@@ -164,7 +164,7 @@ export function applyTheme(theme) {
 	const html = document.documentElement;
 	html.setAttribute('data-theme', theme);
 	const overlay = titleBarOverlayColors[theme] || titleBarOverlayColors.light;
-	window.electron.invoke('theme:apply', { ...overlay, theme, bareMode: window.__settings.bareMode }).catch(() => {});
+	window.electron.invoke('theme:apply', { ...overlay, theme }).catch(() => {});
 }
 
 /* ------------------------------------------------------------------ */
@@ -222,9 +222,9 @@ export function applySettingsToUI() {
 	}
 	applyBareMode(window.__settings.bareMode);
 
-	// Restore verbose mode
+	// Restore Quiet mode toggle (inverted: checked = Quiet ON = verbose OFF)
 	if (verboseToggle) {
-		verboseToggle.checked = !!window.__settings.verbose;
+		verboseToggle.checked = !window.__settings.verbose;
 	}
 	// Show/hide warning based on toggle state (only if not dismissed)
 	if (permWarning) {
@@ -258,9 +258,9 @@ function readSettingsFromUI() {
 		window.__settings.bareMode = bareModeToggle.checked;
 	}
 
-	// verbose mode
+	// Quiet mode toggle (inverted: checked = Quiet ON = verbose OFF)
 	if (verboseToggle) {
-		window.__settings.verbose = verboseToggle.checked;
+		window.__settings.verbose = !verboseToggle.checked;
 	}
 }
 
@@ -326,7 +326,7 @@ async function testConnection() {
 /* Event wiring                                                       */
 /* ------------------------------------------------------------------ */
 function dimTitleBar(dim) {
-	window.electron.invoke('theme:dim', { dim: !!dim, theme: window.__settings.theme || 'light', bareMode: window.__settings.bareMode }).catch(() => {});
+	window.electron.invoke('theme:dim', { dim: !!dim, theme: window.__settings.theme || 'light' }).catch(() => {});
 }
 
 document.getElementById('settings-btn').addEventListener('click', () => {
@@ -352,16 +352,20 @@ restrictWorkdirToggle.addEventListener('change', () => {
 	}
 	// Replace previous toast so only one shows at a time
 	if (window.__workdirToast) { window.__workdirToast.remove(); }
-	if (window.__settings.restrictToWorkDir) {
-		window.__workdirToast = addToast('Restrict workdir: ON', '', 3000);
-	} else {
-		window.__workdirToast = addToast('⚠ Bare can now work outside the current directory', 'warning', 5000);
+	if (!window.__settings.bareMode) {
+		if (window.__settings.restrictToWorkDir) {
+			window.__workdirToast = addToast('Restrict workdir: ON', '', 3000);
+		} else {
+			window.__workdirToast = addToast('⚠ Bare can now work outside the current directory', 'warning', 5000);
+		}
 	}
 });
 
 readOnlyToggle.addEventListener('change', () => {
 	window.__settings.readOnly = readOnlyToggle.checked;
-	addToast(`Read-only: ${window.__settings.readOnly ? 'ON' : 'OFF'}`, '', 3000);
+	if (!window.__settings.bareMode) {
+		addToast(`Read-only: ${window.__settings.readOnly ? 'ON' : 'OFF'}`, '', 3000);
+	}
 });
 
 /* ------------------------------------------------------------------ */
@@ -369,25 +373,21 @@ readOnlyToggle.addEventListener('change', () => {
 /* ------------------------------------------------------------------ */
 export function applyBareMode(on) {
 	document.documentElement.setAttribute('data-bare-mode', on ? 'true' : 'false');
-	const theme = window.__settings.theme || 'light';
-	window.electron.invoke('bare-mode:apply', { on, theme }).catch(() => {});
 }
 
 bareModeToggle.addEventListener('change', () => {
 	window.__settings.bareMode = bareModeToggle.checked;
 	applyBareMode(window.__settings.bareMode);
-	if (window.__settings.bareMode) {
-		addToast('BARE mode: ON', 'invisible', 3000);
-	} else {
-		addToast('BARE mode: OFF', '', 3000);
+	if (!window.__settings.bareMode) {
+		addToast('Bare mode: OFF', '', 3000);
 	}
 });
 
 verboseToggle.addEventListener('change', () => {
-	window.__settings.verbose = verboseToggle.checked;
+	window.__settings.verbose = !verboseToggle.checked;  // inverted: checked = Quiet ON
 	const queued = applyVerboseMode();
-	if (!queued) {
-		addToast(`Verbose: ${window.__settings.verbose ? 'ON' : 'OFF'}`, '', 3000);
+	if (!queued && !window.__settings.bareMode) {
+		addToast(`Quiet: ${verboseToggle.checked ? 'ON' : 'OFF'}`, '', 3000);
 	}
 });
 
@@ -402,12 +402,14 @@ requirePermToggle.addEventListener('change', () => {
 	}
 	// Replace previous toast so only one shows at a time
 	if (window.__permToast) { window.__permToast.remove(); }
-	if (window.__settings.requireToolPermission) {
-		// Turned ON — brief confirmation
-		window.__permToast = addToast('Tool permissions: ON', '', 3000);
-	} else {
-		// Turned OFF — show warning toast
-		window.__permToast = addToast('⚠ Bare can now run all tools without permission', 'warning', 5000);
+	if (!window.__settings.bareMode) {
+		if (window.__settings.requireToolPermission) {
+			// Turned ON — brief confirmation
+			window.__permToast = addToast('Tool permissions: ON', '', 3000);
+		} else {
+			// Turned OFF — show warning toast
+			window.__permToast = addToast('⚠ Bare can now run all tools without permission', 'warning', 5000);
+		}
 	}
 });
 

@@ -3,10 +3,8 @@ const childProcess = require('child_process');
 const MAX_OUTPUT_LENGTH = 50_000;
 const DEFAULT_BASH_TIMEOUT_MS = 15_000;
 
-// Pick the right shell per platform
-const isWin = process.platform === 'win32';
-const isMac = process.platform === 'darwin';
-const SHELL = isWin ? 'cmd.exe' : isMac ? 'zsh' : 'bash';
+// Self-contained shell detection — no external dependencies
+const SHELL = process.platform === 'win32' ? 'cmd.exe' : process.platform === 'darwin' ? 'zsh' : 'bash';
 
 module.exports = {
 	name: "bash",
@@ -14,7 +12,7 @@ module.exports = {
 		type: "function",
 		function: {
 			name: "bash",
-			description: "Run a shell command. Optional timeout. Not for file I/O.",
+			description: "Run a shell command. Optional timeout. Not for file I/O. This gives you full OS and GUI control.",
 			parameters: {
 				type: "object",
 				properties: {

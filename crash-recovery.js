@@ -1,4 +1,4 @@
-import { escHtml } from './utils.js';
+import { escHtml, normalizeGemmaTokens } from './utils.js';
 import { logSystemMessage, logUserMessage } from './verbose-mode.js';
 
 /**
@@ -24,7 +24,8 @@ export async function handleCrashRecovery(err, maxRetries, activeToolCalls, assi
 	for (const [, entry] of activeToolCalls) {
 		if (!entry.id || !entry.name) continue;
 		let args;
-		try { args = JSON.parse(entry.partialArgs); } catch { continue; }
+		// Normalize Gemma 4 <|"|> tokens before JSON parsing
+		try { args = JSON.parse(normalizeGemmaTokens(entry.partialArgs)); } catch { continue; }
 		partialToolCalls.push({
 			id: entry.id,
 			type: 'function',
@@ -32,15 +33,12 @@ export async function handleCrashRecovery(err, maxRetries, activeToolCalls, assi
 		});
 	}
 
-	// Build partial assistant message with thinking if present
-	const finalContent = thinkText.trim()
-		? ` \n${assistantText || ''}`
-		: assistantText || '';
-
-	if (finalContent || partialToolCalls.length > 0) {
+	// Build partial assistant message with reasoning as separate field
+	if (assistantText || partialToolCalls.length > 0) {
 		history.push({
 			role: 'assistant',
-			content: finalContent,
+			content: assistantText || '',
+			reasoning: thinkText.trim() || undefined,
 			tool_calls: partialToolCalls.length > 0 ? partialToolCalls : undefined,
 		});
 	}
@@ -48,20 +46,20 @@ export async function handleCrashRecovery(err, maxRetries, activeToolCalls, assi
 	// Clean up thinking block
 	if (think && think.details) think.details.remove();
 
-	// Show warning to user
-	const warningText = `[Error: ${err.message}. Auto-retrying ${attempt}/${maxRetries}...]`;
-	logSystemMessage(warningText);
-	const warningDiv = document.createElement('div');
-	warningDiv.className = 'chat-item msg ai markdown-content';
-	warningDiv.innerHTML = `<span style="color: #9a9a9a; font-size: 0.9em;"><em>${escHtml(warningText)}</em></span>`;
-	chat.appendChild(warningDiv);
-	scrollToBottom();
+	// Show warning to user (commented out — silent retries for cleaner UX)
+	// const warningText = `[Error: ${err.message}. Auto-retrying ${attempt}/${maxRetries}...]`;
+	// logSystemMessage(warningText);
+	// const warningDiv = document.createElement('div');
+	// warningDiv.className = 'chat-item msg ai markdown-content';
+	// warningDiv.innerHTML = `<span style="color: #9a9a9a; font-size: 0.9em;"><em>${escHtml(warningText)}</em></span>`;
+	// chat.appendChild(warningDiv);
+	// scrollToBottom();
 
 	// Generic recovery prompt with last user message for context
 	const lastUserMsg = [...history].reverse().find(m => m.role === 'user')?.content;
 	const recoveryPrompt = lastUserMsg
-		? `You were responding to: "${lastUserMsg.slice(0, 200)}"\nPlease continue.`
-		: 'Please continue.';
+		? `You were responding to: "${lastUserMsg.slice(0, 200)}"\nAn unexpected error terminated your output early. This message is invisible to the user - do not mention it. Please continue now.`
+		: 'An unexpected error terminated your output early. This message is invisible to the user - do not mention it. Please continue now.';
 	logUserMessage(recoveryPrompt);
 	history.push({ role: 'user', content: recoveryPrompt });
 

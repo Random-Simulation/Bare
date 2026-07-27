@@ -2,7 +2,7 @@
 // TOOL PLUGIN TEMPLATE
 // ============================================================================
 //
-// Use the write tool to create a new file in ./plugins/your_tool_name.js
+// Use the write tool to create a new file in the user data directory's plugins folder (e.g., %APPDATA%\\bare\\plugins)
 // following the structure below. The system auto-reloads plugins instantly
 // after file creation — you can use the new tool immediately.
 //
@@ -10,7 +10,7 @@
 // ENVIRONMENT & PATHS
 // ============================================================================
 //
-// - __dirname resolves to the ./plugins/ folder, NOT the project root.
+// - __dirname resolves to the plugin's directory, NOT the project root.
 //   To reach the project root:  const ROOT = path.join(__dirname, "..");
 //
 // - Settings file (bare.json) lives in the user data directory.
@@ -84,7 +84,7 @@ module.exports = {
 // RULES
 // ============================================================================
 // - Do NOT override core tools (read, edit, write, bash, finish_task)
-//   unless intentionally replacing them. All core tools are plugins in ./plugins/
+//   unless intentionally replacing them. All core tools are plugins in %APPDATA%\\bare\\Plugins.
 // - The execute function receives (args, ctx) where ctx has workDir.
 // - Always return a string from execute().
 // - For async operations, mark execute as async and use await.

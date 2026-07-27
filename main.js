@@ -14,8 +14,12 @@ const isWin = process.platform === "win32"; // custom titleBar only on Windows
 
 // User data directory: app.getPath('userData') already includes the app name.
 // Windows: %APPDATA%/bare  |  macOS: ~/Library/Application Support/bare  |  Linux: ~/.config/bare
-// Stores: bare.json, tool-plugin-template.js
+// Stores: bare.json, tool-plugin-template.js, Plugins/
 const userDataDir = app.getPath('userData');
+
+// User plugins directory — this is where all tools live (core + custom).
+// On first launch, bundled core plugins are copied here from the project's plugins/ folder.
+const userPluginsDir = path.join(userDataDir, 'Plugins');
 
 // ============================================================================
 // State
@@ -37,7 +41,7 @@ const DEFAULT_SETTINGS = {
 	readOnly: false,
 	requireToolPermission: true,
 	bareMode: false,
-	verbose: false,
+	verbose: true,
 	workdirWarningDismissed: false,
 	permWarningDismissed: false,
 	restrictPromptDismissed: false,
@@ -70,13 +74,51 @@ function copyBundledFile(basename, force) {
 	}
 }
 
+/**
+ * Copy bundled core plugins from the project's plugins/ folder to the user data Plugins/ dir.
+ * Always overwrites bundled core plugins so updates propagate. Custom user plugins are untouched.
+ */
+function copyBundledPlugins() {
+	const bundledDir = path.join(RESOURCES, 'plugins');
+	if (!fs.existsSync(bundledDir)) {
+		console.warn('[init] no bundled plugins directory at', bundledDir);
+		return;
+	}
+
+	// Ensure user plugins directory exists
+	fs.mkdirSync(userPluginsDir, { recursive: true });
+
+	// List bundled plugin files
+	const bundledFiles = fs.readdirSync(bundledDir).filter(f => f.endsWith('.js'));
+	if (bundledFiles.length === 0) {
+		console.log('[init] no bundled plugins to copy');
+		return;
+	}
+
+	let copied = 0;
+	for (const file of bundledFiles) {
+		const src = path.join(bundledDir, file);
+		const dst = path.join(userPluginsDir, file);
+		try {
+			fs.copyFileSync(src, dst);
+			copied++;
+		} catch (e) {
+			console.warn('[init] failed to copy plugin', file, ':', e.message);
+		}
+	}
+	console.log(`[init] copied ${copied} bundled plugin(s) to`, userPluginsDir);
+}
+
 /** Ensure user data dir exists and copy bundled files on first launch */
 function ensureUserData() {
 	fs.mkdirSync(userDataDir, { recursive: true });
 
 	ensureSettingsFile();
 	copyBundledFile("tool-plugin-template.js", true);  // always overwrite (reference spec)
-	writeDefaultFile("system-prompt-addition.md", "You are Bare, a coding agent.");
+	writeDefaultFile("system-prompt-addition.md", "You are Bare, an autonomous system agent.");
+
+	// Copy bundled core plugins to user data (always overwrite so updates propagate)
+	copyBundledPlugins();
 }
 
 /** Write a default file to userDataDir if it doesn't exist yet */
@@ -163,6 +205,10 @@ function loadSettings() {
 
 ensureUserData();
 
+// Point the plugin loader at the user data Plugins/ directory
+pluginLoader.setPluginsDir(userPluginsDir);
+console.log('[init] plugins directory:', userPluginsDir);
+
 pluginLoader.loadPlugins();
 
 pluginLoader.watchPlugins(() => {
@@ -209,11 +255,11 @@ ipcMain.handle("app:system-prompt-addition", async () => {
 			return fs.readFileSync(filePath, 'utf-8').trim();
 		}
 	} catch { /* ignore */ }
-	return 'You are Bare, a coding agent.';
+	return 'You are Bare, an autonomous system agent.';
 });
 
 ipcMain.handle("app:platform", async () => {
-	return sandbox.OS_NAME;
+	return `${sandbox.OS_NAME} (${sandbox.DEFAULT_SHELL})`;
 });
 
 ipcMain.handle("fs:workdir", async (_event, newDir) => {
@@ -294,14 +340,12 @@ ipcMain.handle("settings:load", async () => { return loadSettings(); });
 // -- Title bar overlay helpers — Windows only --
 
 let _settingsOpen = false;  // tracks whether settings overlay is visible
-let _liveBareMode = false;  // live bareMode state from renderer (file may be stale)
 
 /** Compute overlay colours for a given theme and state */
-function _overlayFor(theme, dim, bareMode) {
+function _overlayFor(theme, dim) {
 	const bg = theme === "dark" ? "#0d0d0d" : "#ffffff";
 	const dimmedBg = theme === "dark" ? "#090909" : "#b3b3b3";
 	const effectiveBg = dim ? dimmedBg : bg;
-	if (bareMode) return { color: effectiveBg, symbolColor: effectiveBg };  // BARE: buttons hidden
 	if (dim) {
 		return {
 			color: dimmedBg,
@@ -315,39 +359,27 @@ function _overlayFor(theme, dim, bareMode) {
 }
 
 /** Apply overlay using live state from renderer */
-function _applyOverlay(theme, bareMode) {
+function _applyOverlay(theme) {
 	if (!isWin || !win || win.isDestroyed()) return;
 	const settings = loadSettings();
-	const bm = bareMode ?? _liveBareMode ?? !!settings?.bareMode;
 	const th = theme || settings?.theme || 'light';
-	win.setTitleBarOverlay(_overlayFor(th, _settingsOpen, bm));
+	win.setTitleBarOverlay(_overlayFor(th, _settingsOpen));
 }
 
-ipcMain.handle("theme:apply", async (_event, { color, symbolColor, theme, bareMode }) => {
+ipcMain.handle("theme:apply", async (_event, { color, symbolColor, theme }) => {
 	if (!isWin || !win || win.isDestroyed()) return;
-	if (bareMode !== undefined) _liveBareMode = !!bareMode;
 	// If settings panel is open, re-dim instead of using normal colours
 	if (_settingsOpen) {
-		_applyOverlay(theme, bareMode);
+		_applyOverlay(theme);
 		return;
 	}
-	const bm = _liveBareMode ?? !!loadSettings()?.bareMode;
-	if (bm) symbolColor = color;
 	win.setTitleBarOverlay({ color, symbolColor });
 });
 
-ipcMain.handle("theme:dim", async (_event, { dim, theme, bareMode }) => {
+ipcMain.handle("theme:dim", async (_event, { dim, theme }) => {
 	if (!isWin || !win || win.isDestroyed()) return;
 	_settingsOpen = !!dim;
-	if (bareMode !== undefined) _liveBareMode = !!bareMode;
-	_applyOverlay(theme, bareMode);
-});
-
-// -- BARE mode: hide title bar buttons by blending symbol color into bg --
-ipcMain.handle("bare-mode:apply", async (_event, { on, theme }) => {
-	if (!isWin || !win || win.isDestroyed()) return;
-	_liveBareMode = !!on;
-	_applyOverlay(theme, on);
+	_applyOverlay(theme);
 });
 
 // ============================================================================
@@ -359,7 +391,6 @@ app.whenReady().then(() => {
 
 	const settings = loadSettings();
 	const savedTheme = settings?.theme || (nativeTheme.shouldUseDarkColors ? "dark" : "light");
-	const savedBareMode = !!settings?.bareMode;
 
 	const windowOpts = {
 		width: 1200,
@@ -381,7 +412,7 @@ app.whenReady().then(() => {
 	if (isWin) {
 		windowOpts.titleBarStyle = "hidden";
 		const bg = savedTheme === "dark" ? "#0d0d0d" : "#ffffff";
-		const sym = savedBareMode ? bg : (savedTheme === "dark" ? "#f5f5f5" : "#111111");
+		const sym = savedTheme === "dark" ? "#f5f5f5" : "#111111";
 		windowOpts.titleBarOverlay = { color: bg, symbolColor: sym };
 	}
 

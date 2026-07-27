@@ -143,7 +143,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       if (perm === 'allow-all') {
         window.__settings.requireToolPermission = false;
         window.electron.invoke('settings:save', window.__settings).catch(() => {});
-        addToast('⚠ Tool permissions disabled — Bare will no longer ask', 'error', 4000);
+        if (!window.__settings.bareMode) addToast('⚠ Tool permissions disabled — Bare will no longer ask', 'error', 4000);
       }
       permissionCheckedToolIds.add(pid);
     }
@@ -342,12 +342,10 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       }
 
       /* --- Parse tool args, salvage leaked reasoning, sweep content leaks --- */
-      const { completedToolCalls: finalized, assistantText: _at, thinkText: _tt, hasThinking: _ht } = finalizeToolCalls(
-        activeToolCalls, { assistantText, thinkText, hasThinking }, hasParserBug,
+      const { completedToolCalls: finalized, assistantText: _at } = finalizeToolCalls(
+        activeToolCalls, assistantText,
       );
       assistantText = _at;
-      thinkText = _tt;
-      hasThinking = _ht;
       for (const tc of finalized) completedToolCalls.push(tc);
 
       /* --- 3. Finalize thinking block --- */
@@ -405,6 +403,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         history.push({
           role: 'assistant',
           content: buildAssistantContent(assistantText, thinkText),
+          reasoning: thinkText.trim() || undefined,
           tool_calls: completedToolCalls.map(tc => ({
             id: tc.id,
             type: 'function',
@@ -495,6 +494,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         history.push({
           role: 'assistant',
           content: buildAssistantContent(assistantText, thinkText),
+          reasoning: thinkText.trim() || undefined,
           tool_calls: completedToolCalls.map(tc => ({
             id: tc.id,
             type: 'function',
@@ -537,12 +537,13 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         if (assistantText.trim()) logAssistantText(assistantText.trim());
         history.push({ 
           role: 'assistant', 
-          content: buildAssistantContent(assistantText, thinkText) 
+          content: buildAssistantContent(assistantText, thinkText),
+          reasoning: thinkText.trim() || undefined,
         });
 
         /* --- safeguard: only thinking, no real content — reprompt to continue --- */
         if (!assistantText.trim()) {
-          history.push({ role: 'user', content: 'Continue.' });
+          history.push({ role: 'user', content: 'An unexpected error occurred which stopped your output. Please continue.' });
           continue;
         }
 

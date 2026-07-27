@@ -1,44 +1,21 @@
 /* ═══════════════════════════════════════════
-   BARE Mode — removes all UI elements
+   BARE Mode — minimal UI (no toasts, no buttons, no warnings)
    ═══════════════════════════════════════════ */
 
-[data-bare-mode="true"] #settings-btn,
-[data-bare-mode="true"] #folder-btn,
-[data-bare-mode="true"] #new-session-btn {
-  color: var(--bg) !important;
-  animation: none !important;
-}
-
-[data-bare-mode="true"] #prompt-wrapper {
-  background: var(--bg) !important;
-}
-
-[data-bare-mode="true"] #prompt {
-  color: var(--bg) !important;
-  caret-color: var(--bg) !important;
-}
-
-[data-bare-mode="true"] #stop-btn,
-[data-bare-mode="true"] #submit-btn {
-  color: var(--bg) !important;
-}
-
-[data-bare-mode="true"] ::-webkit-scrollbar-thumb {
-  background: var(--bg) !important;
-}
-
+/* Hide toast container (toasts, permission prompts, folder prompts, attachment toasts) */
 [data-bare-mode="true"] #toast-container {
   display: none !important;
 }
 
-[data-bare-mode="true"] .toast-line {
+/* Hide send and stop buttons */
+[data-bare-mode="true"] #stop-btn,
+[data-bare-mode="true"] #submit-btn {
   display: none !important;
 }
 
-/* Context bar gradient — blend into background */
-[data-bare-mode="true"] {
-  --ctx-fill: var(--bg) !important;
-  --ctx-empty: var(--bg) !important;
+/* Hide settings warnings */
+[data-bare-mode="true"] .settings-warning {
+  display: none !important;
 }
 
 

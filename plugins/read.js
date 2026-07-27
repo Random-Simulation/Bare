@@ -68,7 +68,7 @@ module.exports = {
 		type: "function",
 		function: {
 			name: "read",
-			description: "Read a file or list current directory with (.) Optional offset/limit for text files.",
+			description: "Read a file, image or list directory contents. Paths are relative to the working directory. Use '.' to list the current directory. Optional offset/limit for text files.",
 			parameters: {
 				type: "object",
 				properties: {
@@ -84,15 +84,8 @@ module.exports = {
 		const fullPath = path.resolve(ctx.workDir, args.path);
 		const ext = path.extname(fullPath).toLowerCase();
 
-		// Block paths that escape the working directory (e.g. '..')
-		// Exception: allow reading the tool plugin template from userDataDir
-		const normalizedWork = path.normalize(ctx.workDir).toLowerCase();
-		const normalizedFull = path.normalize(fullPath).toLowerCase();
-		const normalizedTemplate = ctx.templatePath ? path.normalize(ctx.templatePath).toLowerCase() : '';
-		const isTemplatePath = normalizedFull === normalizedTemplate;
-		if (!isTemplatePath && normalizedFull !== normalizedWork && !normalizedFull.startsWith(normalizedWork + path.sep)) {
-			throw new Error(`access denied: '${args.path}' is outside the working directory`);
-		}
+		// Path restriction handled by safety.js based on restrictToWorkDir setting.
+		// Reads are unrestricted by default.
 
 		// Stat once up front — determines if file, directory, or missing
 		let stat;
