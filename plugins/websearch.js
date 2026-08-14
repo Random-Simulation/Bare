@@ -45,6 +45,16 @@ function createScraper() {
 	});
 }
 
+/** Only allow public http/https pages — blocks file://, data:, and local/private hosts. */
+function isSafeUrl(url) {
+	try {
+		const u = new URL(url);
+		if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+		const h = u.hostname.toLowerCase();
+		return !h.startsWith('127.') && !['localhost', '0.0.0.0', '::1'].includes(h) && !h.endsWith('.local');
+	} catch { return false; }
+}
+
 function loadURL(win, url, timeoutMs, jsWaitMs = 0) {
 	return new Promise((resolve, reject) => {
 		const t = setTimeout(() => reject(new Error("timeout")), timeoutMs);
@@ -257,6 +267,7 @@ module.exports = {
 		const seen = new Set();
 		const urlsToScrape = allLinks
 			.filter(l => {
+				if (!isSafeUrl(l.url)) return false;
 				if (l.url.match(/\.(pdf|jpg|jpeg|png|mp4|avi|zip|docx?)(\?.*)?$/i)) return false;
 				if (seen.has(l.url)) return false;
 				seen.add(l.url);
