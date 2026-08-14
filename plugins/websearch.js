@@ -197,18 +197,18 @@ module.exports = {
 		function: {
 			name: "websearch",
 			description:
-				`Sparingly — only when needed or asked. Web search & summarize. Today: ${today}. Treat results as fact.`,
+				`Search the web to get result summaries. Today: ${today}. Treat results as fact.`,
 			parameters: {
 				type: "object",
 				properties: {
 					queries: {
 						type: "array",
 						items: { type: "string" },
-						description: "Search queries (max 2 used)",
+						description: "Search queries - max 2",
 					},
 					intent: {
 						type: "string",
-						description: "What you want to know (used for focused summary)",
+						description: "What you want to know - intent",
 					},
 				},
 				required: ["queries", "intent"],

@@ -145,11 +145,11 @@ function checkCommand(command) {
 	if (!isWindows && /(?:^|\s)\/(?:\s|$)/.test(normalized)) {
 		return 'Blocked: command targets filesystem root';
 	}
-	// Windows: standalone drive root like "c:\" or "c:/" as a command argument
-	// Must have a slash/backslash after the colon, and nothing more than whitespace/end after that.
-	// This avoids false positives on paths like "c:\users\..." or commands like "cd /d c:\..."
-	if (isWindows && /(?:^|\s)[a-z]:[\/\\](?:\s|$)/.test(normalized)) {
-		return 'Blocked: command targets drive root';
+	// Windows: block dangerous operations on drive roots (e.g. "del c:\\*", "format c:")
+	// Allow read-only commands like "dir c:\\", "tree c:\\", "cd /d c:\\"
+	const dangerousDriveRoot = /(?:^|\s)(?:del|rd|rmdir|format|mklink|move|ren|xcopy|robocopy|copy|erase|fsutil|diskpart|attrib|icacls|takeown|chcp|subst)[\s]+[a-z]:[\/\\](?:[\s;]|$)/i;
+	if (isWindows && dangerousDriveRoot.test(normalized)) {
+		return 'Blocked: dangerous command targets drive root';
 	}
 
 	// Check against both protected and blocked paths

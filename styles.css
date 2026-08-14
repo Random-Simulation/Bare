@@ -242,6 +242,59 @@ textarea:focus {
   font-size: 0.85em;
 }
 
+/* ── Code block wrapper + copy buttons ── */
+.code-block-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  margin: 8px 0;
+  background: var(--surface);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.code-block-scroll {
+  flex: 1;
+  overflow-x: auto;
+  min-width: 0;
+}
+.code-block-scroll > pre {
+  margin: 0;
+  background: transparent;
+  border-radius: 0;
+}
+.code-block-btns {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-shrink: 0;
+  width: 36px;
+  padding: 6px 2px;
+  background: var(--surface);
+}
+.code-copy-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: 5px;
+  color: var(--text-tert);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s;
+  outline: none;
+}
+.code-block-wrapper:hover .code-copy-btn {
+  opacity: 1;
+}
+.code-copy-btn:hover {
+  color: var(--text-sec);
+}
+
 .markdown-content blockquote {
   margin: 8px 0;
   padding: 4px 12px;
@@ -1391,3 +1444,5 @@ kbd.shortcut-badge {
 .char-counter .over-limit {
   color: var(--diff-remove);
 }
+
+ 

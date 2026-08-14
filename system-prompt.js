@@ -79,8 +79,8 @@ export async function getSystemPrompt() {
 - Work autonomously inside the current directory.
 - Before every tool call, write a very short sentence describing what you are about to do.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
-- On task completion: brief summary, then call finish_task (not during discussion).
-- For Math use $/$ KaTeX with LaTeX syntax for all equations.${shellHint}`;
+- For Math use $/$ KaTeX with LaTeX syntax for all equations.${shellHint}
+- On task completion: brief summary, then call finish_task (not during discussion).`;
 
 	if (safetyRules.length > 0) {
 		rules += '\n\n## Active Safety Restrictions\n' + safetyRules.join('\n');

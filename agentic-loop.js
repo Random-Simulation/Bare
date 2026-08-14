@@ -5,6 +5,7 @@ import {
   setAutoScroll,
   scheduleUpdate,
   renderMarkdownTo,
+  addCopyButtons,
   buildAssistantContent,
   truncateToolOutput,
   friendlyError,
@@ -342,10 +343,14 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       }
 
       /* --- Parse tool args, salvage leaked reasoning, sweep content leaks --- */
-      const { completedToolCalls: finalized, assistantText: _at } = finalizeToolCalls(
+      const { completedToolCalls: finalized, assistantText: _at, leakedThinking } = finalizeToolCalls(
         activeToolCalls, assistantText,
       );
       assistantText = _at;
+      if (leakedThinking) {
+        thinkText += (thinkText ? '\n\n' : '') + leakedThinking;
+        hasThinking = true;
+      }
       for (const tc of finalized) completedToolCalls.push(tc);
 
       /* --- 3. Finalize thinking block --- */
@@ -381,6 +386,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         } catch (e) {
           assistantMessageDiv.innerHTML = `<pre style="white-space: pre-wrap;">${escHtml(displayText)}</pre>`;
         }
+        addCopyButtons(assistantMessageDiv);
         scrollToBottom();
       } else if (assistantMessageDiv) {
         assistantMessageDiv.remove();

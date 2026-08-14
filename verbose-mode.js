@@ -15,7 +15,7 @@ import {
 	createThinkBlock,
 	renderLazyContent,
 } from './ui-blocks.js';
-import { capitalise, escHtml, renderMarkdownTo } from './utils.js';
+import { capitalise, escHtml, renderMarkdownTo, addCopyButtons } from './utils.js';
 
 /* ------------------------------------------------------------------ */
 /* Event Log — flat array, captured regardless of mode                 */
@@ -140,8 +140,10 @@ export function renderChatFromLog(verbose) {
 				div.className = 'chat-item msg ai markdown-content';
 				try {
 					renderMarkdownTo(div, evt.content);
+					addCopyButtons(div);
 				} catch {
 					div.innerHTML = `<pre style="white-space:pre-wrap">${escHtml(evt.content)}</pre>`;
+					addCopyButtons(div);
 				}
 				chat.appendChild(div);
 				break;

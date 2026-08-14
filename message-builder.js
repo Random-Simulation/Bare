@@ -83,29 +83,28 @@ export function detectParserBug(thinkText, assistantText) {
  *
  * @param {Map} activeToolCalls - Map of index → { id, name, partialArgs }
  * @param {string} assistantText - Current assistant text (mutated on sweep)
- * @returns {{ completedToolCalls: Array, assistantText: string }}
+ * @returns {{ completedToolCalls: Array, assistantText: string, leakedThinking: string }}
  * @throws {Error} if tool-call args can't be parsed
  */
 export function finalizeToolCalls(activeToolCalls, assistantText) {
 	const completedToolCalls = [];
+	let leakedThinking = '';
 
-	// --- 1. Retroactive Sweep-Up: Qwen content leak (fallback) ---
+	// --- 1. Retroactive Sweep-Up: Qwen content leak (fallback) --- [DISABLED]
 	// The SSE parser should have already split these, but if the server
 	// sends  in a way that bypasses the parser, catch it here.
-	if (assistantText.includes('\u003c' + '/think' + '\u003e')) {
-		const lastIdx = assistantText.lastIndexOf('\u003c' + '/think' + '\u003e');
-		const leakedThinking = assistantText.substring(0, lastIdx);
-		const realContent = assistantText.substring(lastIdx + 8);
-		// Push leaked thinking back into the think block (via return)
-		// For now, just strip it from assistantText — the agentic loop
-		// already captured thinkText from the reasoning events.
-		assistantText = realContent;
-	}
+	// if (assistantText.includes('\u003c' + '/think' + '\u003e')) {
+	// 	const lastIdx = assistantText.lastIndexOf('\u003c' + '/think' + '\u003e');
+	// 	const qwenLeak = assistantText.substring(0, lastIdx);
+	// 	const realContent = assistantText.substring(lastIdx + 8);
+	// 	// Save the leaked thinking so it can be restored into the think block
+	// 	if (qwenLeak.trim()) leakedThinking += qwenLeak.trim();
+	// 	assistantText = realContent;
+	// }
 
 	// --- 2. Parse tool call args & handle Gemma normalization ---
 	for (const [, entry] of activeToolCalls) {
 		let parsedArgs = null;
-		let leakedThinking = '';
 
 		// Normalize Gemma 4 <|"|> tokens before JSON parsing
 		const normalizedArgs = normalizeGemmaTokens(entry.partialArgs);
@@ -123,7 +122,14 @@ export function finalizeToolCalls(activeToolCalls, assistantText) {
 					if (str[i] === '{') {
 						try {
 							parsedArgs = JSON.parse(str.substring(i, endIdx + 1));
-							leakedThinking = str.substring(0, i);
+							const salvageLeak = str.substring(0, i).trim();
+							if (salvageLeak) {
+								// Prepend all misrouted content back to assistantText.
+								// No close-tag splitting — that heuristic incorrectly moves
+								// legitimate assistant text into the thinking block when
+								// llama.cpp misroutes backtick content into tool_call stream.
+								assistantText = salvageLeak + assistantText;
+							}
 							break;
 						} catch (e) { /* try next '{' */ }
 					}
@@ -159,8 +165,9 @@ export function finalizeToolCalls(activeToolCalls, assistantText) {
 		}
 	}
 
-	return { completedToolCalls, assistantText };
+	return { completedToolCalls, assistantText, leakedThinking: leakedThinking.trim() };
 }
+
 
 // ═══════════════════════════════════════════════════════════
 // Reasoning Extraction (for message building)

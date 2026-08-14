@@ -8,15 +8,21 @@
 
 /**
  * Render markdown text into a DOM element, then post-process with KaTeX
- * to render any math delimiters ($...$, $$...$$, \(...\), \[...\]).
+ * to render any math delimiters ($...$, $...$, \(...\), \[...\]).
+ *
+ * Does NOT add copy buttons — call addCopyButtons(el) separately after
+ * streaming is complete to avoid DOM thrashing / button flicker during
+ * live token updates.
  */
 export function renderMarkdownTo(el, src) {
 	el.innerHTML = marked.parse(src);
+
+	// ── KaTeX math rendering ──
 	if (typeof window.renderMathInElement === 'function') {
 		try {
 			window.renderMathInElement(el, {
 				delimiters: [
-					{ left: "$$", right: "$$", display: true },
+					{ left: "$", right: "$", display: true },
 					{ left: "$",  right: "$",  display: false },
 					{ left: "\\(", right: "\\)", display: false },
 					{ left: "\\[", right: "\\]", display: true },
@@ -27,6 +33,79 @@ export function renderMarkdownTo(el, src) {
 			});
 		} catch (e) { /* KaTeX render failure — ignore */ }
 	}
+}
+
+/**
+ * Wrap all <pre> blocks inside el with a code-block-wrapper div and
+ * attach copy buttons (top-right and bottom-right).
+ *
+ * Call this ONCE after streaming is complete — not during live updates —
+ * to avoid destroying/recreating button elements every frame.
+ */
+export function addCopyButtons(el) {
+	const copySvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M7 9.667a2.667 2.667 0 0 1 2.667 -2.667h8.666a2.667 2.667 0 0 1 2.667 2.667v8.666a2.667 2.667 0 0 1 -2.667 2.667h-8.666a2.667 2.667 0 0 1 -2.667 -2.667l0 -8.666"/><path d="M4.012 16.737a2.005 2.005 0 0 1 -1.012 -1.737v-10c0 -1.1 .9 -2 2 -2h10c1.1 0 2 .9 2 2v10c0 1.1-.9 2-2 2h-10c-1.1 0-2-.9-2-2v-8.667"/><path d="M12 16h.01"/></svg>`;
+	const checkSvg = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M5 12l5 5l10 -10"/></svg>`;
+
+	el.querySelectorAll('pre').forEach(pre => {
+		// Skip if already wrapped (safety guard)
+		if (pre.parentElement?.classList.contains('code-block-wrapper')) return;
+
+		// Count lines in the code block content
+		const codeEl = pre.querySelector('code');
+		const codeText = codeEl ? codeEl.textContent : pre.textContent;
+		// Strip trailing newline (markdown code blocks often have one) to avoid inflated counts
+		const lineCount = codeText.replace(/\n$/, '').split('\n').length;
+
+		// Build the copy button click handler (shared by top/bottom)
+		const makeClickHandler = (btns) => () => {
+			navigator.clipboard.writeText(codeText).then(() => {
+				btns.forEach(b => b.innerHTML = checkSvg);
+				setTimeout(() => {
+					btns.forEach(b => b.innerHTML = copySvg);
+				}, 1500);
+			});
+		};
+
+		// Create top-right copy button (always shown)
+		const btnTop = document.createElement('button');
+		btnTop.className = 'code-copy-btn';
+		btnTop.title = 'Copy code';
+		btnTop.innerHTML = copySvg;
+		btnTop.dataset.origSvg = copySvg;
+
+		// Create bottom-right copy button (only for ≥ 2 lines)
+		let btnBottom = null;
+		if (lineCount >= 2) {
+			btnBottom = document.createElement('button');
+			btnBottom.className = 'code-copy-btn code-copy-btn-bottom';
+			btnBottom.title = 'Copy code';
+			btnBottom.innerHTML = copySvg;
+			btnBottom.dataset.origSvg = copySvg;
+		}
+
+		const allBtns = btnBottom ? [btnTop, btnBottom] : [btnTop];
+		btnTop.addEventListener('click', makeClickHandler(allBtns));
+		if (btnBottom) btnBottom.addEventListener('click', makeClickHandler(allBtns));
+
+		// Wrapper: flex row, grey box, buttons inside on the right
+		const wrapper = document.createElement('div');
+		wrapper.className = 'code-block-wrapper';
+
+		// Scrollable area for the <pre> (takes remaining width)
+		const scrollArea = document.createElement('div');
+		scrollArea.className = 'code-block-scroll';
+
+		// Column for copy buttons (fixed width, inside the grey box)
+		const btnColumn = document.createElement('div');
+		btnColumn.className = 'code-block-btns';
+		btnColumn.appendChild(btnTop);
+		if (btnBottom) btnColumn.appendChild(btnBottom);
+
+		pre.parentNode.insertBefore(wrapper, pre);
+		scrollArea.appendChild(pre);
+		wrapper.appendChild(scrollArea);
+		wrapper.appendChild(btnColumn);
+	});
 }
 
 /* ------------------------------------------------------------------ */
@@ -218,7 +297,7 @@ export function sanitizeToolOutput(text) {
 
 	let sanitized = text.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]/g, '');
 
-	const MAX_LINE_LEN = 500;
+	const MAX_LINE_LEN = 1000;
 	const lines = sanitized.split('\n');
 	for (let i = 0; i < lines.length; i++) {
 		// Don't truncate __IMAGE__ marker lines — they contain base64 data
