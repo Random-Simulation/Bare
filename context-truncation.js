@@ -2,9 +2,9 @@
  * Prefix-slice context truncation with KV cache awareness.
  *
  * When context usage exceeds a threshold, this function drops the middle
- * 50% of the message history while preserving:
- *   - Head (first 20%): KV cache anchor — reused for free by llama.cpp
- *   - Tail (last 30%): Recent context — re-encoded once, then cached
+ * 60% of the message history while preserving:
+ *   - Head (first 17.5%): KV cache anchor — reused for free by llama.cpp
+ *   - Tail (last 22.5%): Recent context — re-encoded once, then cached
  *
  * Cut boundaries are aligned to clean message edges so assistant→tool
  * chains are never orphaned across a slice point.
@@ -53,16 +53,16 @@ function alignBoundary(history, idx) {
  * @returns {boolean} true if truncation was performed
  */
 export function truncateContextIfNeeded(history, ctxPct, force = false) {
-	if (!force && ctxPct <= 85) return false;
+	if (!force && ctxPct <= window.BARE.AUTO_TRUNCATE_THRESHOLD) return false;
 	if (history.length <= 10) return false;
 
 	const n = history.length;
 
 	// Head: first 17.5% — KV cache anchor (free to reuse)
-	// Tail: last 25% — recent context (re-encoded once)
-	// Middle 57.5% — dropped
+	// Tail: last 22.5% — recent context (re-encoded once)
+	// Middle 60% — dropped
 	const headSize = Math.floor(n * 0.175);
-	const tailSize = Math.floor(n * 0.25);
+	const tailSize = Math.floor(n * 0.225);
 	const tailStart = n - tailSize;
 
 	if (tailStart <= headSize) return false; // Not enough to meaningfully truncate

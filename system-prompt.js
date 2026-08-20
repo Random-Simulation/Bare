@@ -73,7 +73,6 @@ export async function getSystemPrompt() {
 	const shellHint = shellCmds ? `\n- Shell commands: ${shellCmds}` : '';
 
 	let rules = `## Rules
-- Work quickly and do not spend too long reasoning or hypothesizing - instead create real tests to get results.
 - Autonomy: Execute full workflows autonomously inside the current directory; infer technical intent.
 - Keep files <500 lines, single-purpose. Use imports/exports.
 - Batch independent tool calls.
@@ -81,7 +80,7 @@ export async function getSystemPrompt() {
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
 - For Math use $/$ KaTeX with LaTeX syntax for all equations.${shellHint}
 - Verify complex tasks using tools before calling finish_task.
-- On task completion: brief summary, then call finish_task (not during discussion).`;
+- On task completion: brief summary, then call finish_task.`;
 
 	if (safetyRules.length > 0) {
 		rules += '\n\n## Active Safety Restrictions\n' + safetyRules.join('\n');

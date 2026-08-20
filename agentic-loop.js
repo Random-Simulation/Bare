@@ -149,8 +149,8 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       permissionCheckedToolIds.add(pid);
     }
 
-    /* --- Context auto-truncation (preemptive at 85%, llama.cpp only) --- */
-    if (!['ollama', 'vllm'].includes(window.__settings?.serverType) && window.__currentCtxPct > 85 && history.length > 10) {
+    /* --- Context auto-truncation (preemptive, llama.cpp only) --- */
+    if (!['ollama', 'vllm'].includes(window.__settings?.serverType) && window.__currentCtxPct > window.BARE.AUTO_TRUNCATE_THRESHOLD && history.length > 10) {
       saveFullSession(history).catch(() => {});
       truncateContextIfNeeded(history, window.__currentCtxPct);
       window.__currentCtxPct = 50;

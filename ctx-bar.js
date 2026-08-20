@@ -62,9 +62,9 @@ async function pollContext() {
 		promptWrapper.style.background = `linear-gradient(to right, ${fill} ${displayPct}%, ${empty} ${displayPct}%)`;
 
 		// Show auto-truncation notice when context is getting full
-		if (displayPct > 85) {
+		if (displayPct > window.BARE.AUTO_TRUNCATE_THRESHOLD) {
 			clearWarning();
-			_ctxToast = addToast('Auto-truncating context...', 'shimmer', 10000);
+			_ctxToast = addToast('Context will be auto-truncated after this message...', 'shimmer', 10000);
 		} else {
 			clearWarning();
 		}
