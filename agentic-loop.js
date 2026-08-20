@@ -27,7 +27,7 @@ import { hideQuietStatus, showQuietStatus, logThink, logUserMessage, logAssistan
 /* ------------------------------------------------------------------ */
 import { buildMessages, setTools, detectParserBug, finalizeToolCalls } from './message-builder.js';
 import { truncateContextIfNeeded } from './context-truncation.js';
-import { handleCrashRecovery } from './crash-recovery.js';
+import { handleCrashRecovery, salvagePartialAssistant } from './crash-recovery.js';
 import UIRegistry, { GENERIC_HANDLER } from './ui-registry.js';
 import { requestPermission, needsPermission } from './permission-toast.js';
 
@@ -578,7 +578,52 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
 
       if (err.name === 'AbortError') {
         if (!isStreaming()) {
-          if (think?.details) think.details.remove();
+          /* --- user pressed stop: preserve what was streamed so far --- */
+
+          // Push the partial assistant turn (text + reasoning) into history.
+          // Tool calls are deliberately NOT attached: the tools never ran,
+          // and dangling tool_calls would break the request protocol.
+          salvagePartialAssistant({ activeToolCalls, assistantText, thinkText, history, includeToolCalls: false });
+
+          hideQuietStatus();
+
+          // Keep the thinking block if any thought text arrived (verbose mode)
+          if (think?.details) {
+            if (thinkText.trim()) {
+              think._rawContent = thinkText.trim();
+              think.summary.textContent = 'Thought Process';
+              think.summary.classList.remove('pulsing');
+              think.summary.classList.remove('processing');
+              if (think._isOpen) renderLazyContent(think, think.content);
+            } else {
+              think.details.remove();
+              think.details = null;
+            }
+          }
+
+          // Finalize (or drop) the partial assistant output div
+          if (assistantMessageDiv) {
+            if (assistantText.trim()) {
+              try {
+                renderMarkdownTo(assistantMessageDiv, assistantText.trim());
+              } catch {
+                assistantMessageDiv.innerHTML = `<pre style="white-space: pre-wrap;">${escHtml(assistantText)}</pre>`;
+              }
+              addCopyButtons(assistantMessageDiv);
+            } else {
+              assistantMessageDiv.remove();
+              assistantMessageDiv = null;
+            }
+          }
+
+          // Log the partial turn so it survives re-render and app restart
+          if (thinkText.trim()) logThink(thinkText.trim(), !!think?._isOpen);
+          if (assistantText.trim()) logAssistantText(assistantText.trim());
+
+          const sysMsg = 'Generation stopped by user';
+          logSystemMessage(sysMsg);
+          addMsg('system', sysMsg);
+          scrollToBottom();
           break;
         } else {
           err = new Error('Connection timed out after 120 seconds.');

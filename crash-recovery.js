@@ -16,32 +16,60 @@ import { logSystemMessage, logUserMessage } from './verbose-mode.js';
  * @param {HTMLElement} chat - The chat container element
  * @param {Function} scrollToBottom - Callback to scroll chat to bottom
  */
+/**
+ * Salvage partial assistant state from an interrupted stream into history.
+ *
+ * Pushes a single assistant message carrying whatever was streamed so far
+ * (text and/or reasoning, plus — optionally — fully-parsed tool calls).
+ *
+ * @param {Object} opts
+ * @param {Map} opts.activeToolCalls - In-progress tool calls from the interrupted stream
+ * @param {string} opts.assistantText - Partial assistant text accumulated so far
+ * @param {string} opts.thinkText - Partial thinking/reasoning text
+ * @param {Array} opts.history - The message history array (mutated)
+ * @param {boolean} opts.includeToolCalls - When true, tool calls whose args
+ *   fully parse are attached to the message. Only safe when a matching tool
+ *   result follows (crash-retry path). The user-stop path must pass false,
+ *   since unexecuted tool_calls would break the request protocol.
+ * @returns {boolean} true if a message was pushed to history
+ */
+export function salvagePartialAssistant({ activeToolCalls, assistantText, thinkText, history, includeToolCalls = false }) {
+	const partialToolCalls = [];
+	if (includeToolCalls) {
+		// Salvage partial tool calls from the interrupted stream
+		for (const [, entry] of activeToolCalls) {
+			if (!entry.id || !entry.name) continue;
+			let args;
+			// Normalize Gemma 4 <|"|> tokens before JSON parsing
+			try { args = JSON.parse(normalizeGemmaTokens(entry.partialArgs)); } catch { continue; }
+			partialToolCalls.push({
+				id: entry.id,
+				type: 'function',
+				function: { name: entry.name, arguments: JSON.stringify(args) },
+			});
+		}
+	}
+
+	const content = (assistantText || '').trim();
+	const reasoning = (thinkText || '').trim();
+
+	if (content || reasoning || partialToolCalls.length > 0) {
+		history.push({
+			role: 'assistant',
+			content,
+			reasoning: reasoning || undefined,
+			tool_calls: partialToolCalls.length > 0 ? partialToolCalls : undefined,
+		});
+		return true;
+	}
+	return false;
+}
+
 export async function handleCrashRecovery(err, maxRetries, activeToolCalls, assistantText, thinkText, think, currentRetry, history, chat, scrollToBottom) {
 	const attempt = currentRetry;
 
-	// Salvage partial tool calls from the interrupted stream
-	const partialToolCalls = [];
-	for (const [, entry] of activeToolCalls) {
-		if (!entry.id || !entry.name) continue;
-		let args;
-		// Normalize Gemma 4 <|"|> tokens before JSON parsing
-		try { args = JSON.parse(normalizeGemmaTokens(entry.partialArgs)); } catch { continue; }
-		partialToolCalls.push({
-			id: entry.id,
-			type: 'function',
-			function: { name: entry.name, arguments: JSON.stringify(args) },
-		});
-	}
-
-	// Build partial assistant message with reasoning as separate field
-	if (assistantText || partialToolCalls.length > 0) {
-		history.push({
-			role: 'assistant',
-			content: assistantText || '',
-			reasoning: thinkText.trim() || undefined,
-			tool_calls: partialToolCalls.length > 0 ? partialToolCalls : undefined,
-		});
-	}
+	// Salvage partial text/reasoning/tool calls into history
+	salvagePartialAssistant({ activeToolCalls, assistantText, thinkText, history, includeToolCalls: true });
 
 	// Clean up thinking block
 	if (think && think.details) think.details.remove();
