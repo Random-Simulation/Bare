@@ -358,6 +358,14 @@ export async function saveSession(history, chatHtml) {
 	const workDir = await window.electron.invoke('fs:workdir');
 	const eventLog = window.__eventLog || [];
 	await window.electron.invoke('session:save', { history, chatHtml, workDir, eventLog });
+
+	// Persist a saved conversation history file too (skipped for temp sessions)
+	if (window.__session?.isTemporarySession) return;
+	if (history.length === 0) return;
+	const { saveHistoryFile } = await import('./history-store.js');
+	await saveHistoryFile({ history, chatHtml, eventLog }).catch(err => {
+		console.error('Failed to save history file:', err);
+	});
 }
 
 export async function restoreSession(history, chat) {
@@ -381,9 +389,9 @@ export async function clearSession() {
 	await window.electron.invoke('session:clear');
 }
 
-export async function saveFullSession(history) {
+export async function saveFullSession(history, eventLog) {
 	const workDir = await window.electron.invoke('fs:workdir');
-	await window.electron.invoke('session:save-full', { history, workDir });
+	await window.electron.invoke('session:save-full', { history, eventLog, workDir });
 }
 
 /* ------------------------------------------------------------------ */

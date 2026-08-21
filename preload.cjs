@@ -21,8 +21,17 @@ const INVOKE_CHANNELS = new Set([
 	'session:save-full',
 	'settings:save',
 	'settings:load',
+	'sessions:list',
+	'sessions:load',
+	'sessions:save',
+	'sessions:delete',
+	'sessions:new',
+	'sessions:last',
+	'sessions:clear-last',
+	'title:generate',
 	'theme:apply',
 	'theme:dim',
+	'titlebar:temp-mode',
 ]);
 
 const ON_CHANNELS = new Set([

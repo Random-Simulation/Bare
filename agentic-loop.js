@@ -19,6 +19,7 @@ import {
 } from './utils.js';
 import { createThinkBlock, renderLazyContent, completeWriteBlock } from './ui-blocks.js';
 import { hideQuietStatus, showQuietStatus, logThink, logUserMessage, logAssistantText, logToolCall, logSystemMessage, logErrorMessage } from './verbose-mode.js';
+import { saveHistoryFile } from './history-store.js';
 
 /* ------------------------------------------------------------------ */
 /* logUserMessage now takes (displayText, fullText?) — displayText is
@@ -62,6 +63,21 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
   setAutoScroll(true);
   setIsStreaming(true);
   stopBtn.classList.add('visible');
+
+  // Save the history file to disk immediately so it appears in the history
+  // modal while the agentic loop is still running. Only runs for genuinely
+  // new conversations (first save) and not for temporary sessions.
+  if (!window.__session?.isTemporarySession && !window.__session?.currentHistoryId) {
+    try {
+      await saveHistoryFile({
+        history,
+        chatHtml: chat.innerHTML,
+        eventLog: window.__eventLog || [],
+      });
+    } catch (err) {
+      console.error('Early history save failed:', err);
+    }
+  }
 
   let crashRetries = 0;
   const MAX_CRASH_RETRIES = 5;
@@ -150,10 +166,12 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
     }
 
     /* --- Context auto-truncation (preemptive, llama.cpp only) --- */
-    if (!['ollama', 'vllm'].includes(window.__settings?.serverType) && window.__currentCtxPct > window.BARE.AUTO_TRUNCATE_THRESHOLD && history.length > 10) {
-      saveFullSession(history).catch(() => {});
-      truncateContextIfNeeded(history, window.__currentCtxPct);
-      window.__currentCtxPct = 50;
+    if (!['ollama', 'vllm'].includes(window.__settings?.serverType)) {
+      const truncated = truncateContextIfNeeded(history, window.__currentCtxPct);
+      if (truncated) {
+        saveFullSession(history).catch(() => {});
+        window.__currentCtxPct = 60; // conservative estimate until poll corrects
+      }
     }
 
     const messages = await buildMessages(history);
@@ -561,6 +579,11 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         break;
       }
 
+      /* --- checkpoint: save progress mid-loop so a crash/close doesn't lose it --- */
+      if (!window.__session?.isTemporarySession) {
+        saveFullSession(history, window.__eventLog || []).catch(() => {});
+      }
+
     } catch (err) {
 
       if (err.name === 'PermissionDeniedError') {
@@ -637,7 +660,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         console.log('[CTX OVERFLOW] Server rejected request — truncating and retrying...');
         saveFullSession(history).catch(() => {});
         truncateContextIfNeeded(history, 100, true); // force=true bypasses threshold
-        window.__currentCtxPct = 50;
+        window.__currentCtxPct = 60;
         if (think?.details) {
           try { think.details.remove(); } catch {}
         }

@@ -15,7 +15,9 @@
     "appId": "com.bare.app",
     "productName": "Bare",
     "icon": "icon.png",
-    "electronLanguages": ["en-US"],
+    "electronLanguages": [
+      "en-US"
+    ],
     "files": [
       "**/*",
       "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
@@ -39,7 +41,9 @@
     "linux": {
       "target": {
         "target": "AppImage",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       },
       "artifactName": "${productName}-${os}-${version}.${ext}"
     }
@@ -47,7 +51,8 @@
   "dependencies": {
     "chokidar": "^5.0.0",
     "katex": "^0.17.0",
-    "marked": "^18.0.5"
+    "marked": "^18.0.5",
+    "node-llama-cpp": "^3.19.1"
   },
   "devDependencies": {
     "electron": "43.1.0",

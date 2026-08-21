@@ -4,6 +4,8 @@ const fs = require("fs");
 const pluginLoader = require("./plugin-loader");
 const sandbox = require("./sandbox");
 const { validateToolExecution } = require("./safety");
+const sessions = require("./sessions.cjs");
+const titleGen = require("./title-gen.cjs");
 
 // ============================================================================
 // Constants
@@ -316,10 +318,42 @@ ipcMain.handle("session:clear", async () => {
 ipcMain.handle("session:save-full", async (_event, data) => {
 	try {
 		const fullPath = path.join(userDataDir, 'full_session.json');
-		fs.writeFileSync(fullPath, JSON.stringify({ history: data.history }, null, 2), "utf8");
+		fs.writeFileSync(fullPath, JSON.stringify({ history: data.history, eventLog: data.eventLog }, null, 2), "utf8");
 	} catch (e) {
 		console.error("Failed to save full session:", e);
 	}
+});
+
+ipcMain.handle("session:load-full", () => {
+	try {
+		const fullPath = path.join(userDataDir, 'full_session.json');
+		if (fs.existsSync(fullPath)) {
+			return JSON.parse(fs.readFileSync(fullPath, "utf8"));
+		}
+	} catch (e) { console.error("Failed to load full session:", e); }
+	return null;
+});
+
+ipcMain.handle("session:clear-full", () => {
+	try {
+		const fullPath = path.join(userDataDir, 'full_session.json');
+		if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+	} catch (e) { console.error("Failed to clear full session:", e); }
+});
+
+// -- Saved conversation histories --
+
+ipcMain.handle("sessions:list",       () => sessions.listSessions());
+ipcMain.handle("sessions:load",       (_e, id) => sessions.loadSession(id));
+ipcMain.handle("sessions:save",       (_e, d)  => sessions.saveSession(d));
+ipcMain.handle("sessions:delete",     (_e, id) => sessions.deleteSession(id));
+ipcMain.handle("sessions:new",        ()       => sessions.newSessionId());
+ipcMain.handle("sessions:last",       ()       => sessions.loadLastSession());
+ipcMain.handle("sessions:clear-last", ()       => sessions.clearLastSession());
+
+ipcMain.handle("title:generate", async (_e, msg) => {
+  try { return await titleGen.generateTitle(msg); }
+  catch { return "Untitled Chat"; }
 });
 
 // -- Settings persistence --
@@ -340,12 +374,19 @@ ipcMain.handle("settings:load", async () => { return loadSettings(); });
 // -- Title bar overlay helpers — Windows only --
 
 let _settingsOpen = false;  // tracks whether settings overlay is visible
+let _tempMode = false;      // tracks whether temporary session mode is active
 
 /** Compute overlay colours for a given theme and state */
 function _overlayFor(theme, dim) {
+	// Temporary session mode uses the pink background regardless of theme
+	if (_tempMode) {
+		if (dim) {
+			return { color: "#ede6f5", symbolColor: "#7a6099" };
+		}
+		return { color: "#fff5f7", symbolColor: "#111111" };
+	}
 	const bg = theme === "dark" ? "#0d0d0d" : "#ffffff";
 	const dimmedBg = theme === "dark" ? "#090909" : "#b3b3b3";
-	const effectiveBg = dim ? dimmedBg : bg;
 	if (dim) {
 		return {
 			color: dimmedBg,
@@ -380,6 +421,12 @@ ipcMain.handle("theme:dim", async (_event, { dim, theme }) => {
 	if (!isWin || !win || win.isDestroyed()) return;
 	_settingsOpen = !!dim;
 	_applyOverlay(theme);
+});
+
+ipcMain.handle("titlebar:temp-mode", async (_event, { active }) => {
+	if (!isWin || !win || win.isDestroyed()) return;
+	_tempMode = !!active;
+	_applyOverlay(null);
 });
 
 // ============================================================================
@@ -429,6 +476,10 @@ app.whenReady().then(() => {
 			win.webContents.toggleDevTools();
 		}
 	});
+
+	// Warm up the Supra title model only after the app is fully up, so the
+	// load never blocks or slows down the initial window.
+	setTimeout(() => { titleGen.ensureLoaded().catch(() => {}); }, 1000);
 });
 
 app.on("will-quit", () => {});

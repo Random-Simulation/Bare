@@ -290,7 +290,8 @@ export async function buildMessages(history) {
 			};
 			// Send as 'reasoning_content' — this is the field name llama.cpp's
 			// preserve_thinking Jinja template expects for reasoning preservation.
-			if (reasoning) out.reasoning_content = reasoning;
+			// Skeleton messages skip reasoning to save tokens.
+			if (reasoning && !msg._skeleton) out.reasoning_content = reasoning;
 			if (msg.tool_calls) out.tool_calls = msg.tool_calls;
 			messages.push(out);
 

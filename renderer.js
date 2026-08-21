@@ -5,6 +5,9 @@ import { initToolLog, applyVerboseMode, applyPendingVerboseMode, renderChatFromL
 import { pendingAttachments, collectAttachments, clearAttachmentToasts, initAttachments } from './attachments.js';
 import { initShortcuts, showFolderPromptOrWorkDir, resetFolderPrompt, clearTypeMessageToast } from './shortcuts.js';
 import { clearPermissionToasts } from './permission-toast.js';
+import { initHistoryModal } from './history-modal.js';
+import { handleNewSession, handleTempSession, loadHistoryIntoState } from './session-manager.js';
+import { addCopyButtons } from './utils.js';
 
 marked.setOptions({ gfm: true, breaks: false });
 
@@ -31,6 +34,18 @@ document.getElementById('prompt-wrapper').appendChild(submitBtn);
 let isStreaming = false;
 const history = [];
 const queuedMessages = [];
+
+// Saved conversation history state (window refs so history-store can read)
+window.__history = history;
+window.__session = {
+  isTemporarySession: false,
+  currentHistoryId: null,
+  currentHistoryTitle: null,
+  awaitingTitle: false,
+};
+// Stubs used by session-manager.js (filled in after imports)
+window.__renderFromLog = (verbose) => renderChatFromLog(verbose);
+window.__addCopyButtons = addCopyButtons;
 
 // Mirror isStreaming on window so verbose-mode.js can check it
 Object.defineProperty(window, '__isStreaming', {
@@ -104,7 +119,12 @@ chat.addEventListener('toggle', (e) => {
 /* ------------------------------------------------------------------ */
 /* Session                                                             */
 /* ------------------------------------------------------------------ */
-window.saveSession = () => saveSession(history, chat.innerHTML);
+window.saveSession = async () => {
+	// Temporary sessions are never persisted
+	if (window.__session?.isTemporarySession) return;
+	if (history.length === 0) return;
+	await saveSession(history, chat.innerHTML);
+};
 
 /* ------------------------------------------------------------------ */
 /* Input handling                                                      */
@@ -223,18 +243,58 @@ initShortcuts({
   // Show folder prompt / workdir toast after settings are loaded
   setTimeout(() => showFolderPromptOrWorkDir(), 500);
 
-  const restored = await restoreSession(history, chat);
+  // Restore the last active saved conversation history on startup.
+  // Check if a mid-loop checkpoint (full_session.json) is fresher than the
+  // last completed session save — covers the crash/close-mid-loop scenario.
+  const last = await window.electron.invoke('sessions:last');
+  const checkpoint = await window.electron.invoke('session:load-full');
 
-  // If we have an event log, re-render from it (source of truth)
-  if (window.__eventLog?.length > 0) {
-    renderChatFromLog(!!window.__settings?.verbose);
-  } else if (restored && window.__settings?.verbose) {
-    // Old session: DOM already has verbose blocks from saved HTML
+  if (checkpoint?.history?.length > (last?.history?.length || 0)) {
+    // Checkpoint is ahead of the saved session — restore from it
+    loadHistoryIntoState({
+      id: last?.id || null,
+      title: last?.title || 'Untitled Chat',
+      history: checkpoint.history,
+      eventLog: checkpoint.eventLog || [],
+    });
+  } else if (last?.history?.length > 0) {
+    loadHistoryIntoState(last);
+  } else {
+    // No saved history — keep existing (legacy session.json) restore behaviour
+    const restored = await restoreSession(history, chat);
+    // If we have an event log, re-render from it (source of truth)
+    if (window.__eventLog?.length > 0) {
+      renderChatFromLog(!!window.__settings?.verbose);
+    }
   }
 
   scrollToBottom();
   prompt.focus();
 })();
+
+/* ------------------------------------------------------------------ */
+/* Session buttons                                                     */
+/* ------------------------------------------------------------------ */
+const sessionDeps = {
+  chat, prompt, history, queuedMessages,
+  requestStop: doRequestStop,
+  resetFolderPrompt,
+};
+
+document.getElementById('new-session-btn').addEventListener('click', async () => {
+  if (isStreaming) doRequestStop();
+  await handleNewSession(sessionDeps);
+  updateButtonVisibility();
+});
+
+document.getElementById('temp-session-btn').addEventListener('click', () => {
+  if (isStreaming) doRequestStop();
+  handleTempSession(sessionDeps);
+  updateButtonVisibility();
+});
+
+// Wire history modal
+initHistoryModal(sessionDeps);
 
 window.electron.on('tools:changed', loadTools);
 
