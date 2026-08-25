@@ -21,6 +21,16 @@ window.__settings = {
 	workDir: '',
 };
 
+// Optional llama.cpp slot pin — seeded synchronously from the ?slotId= query
+// param (injected by main.js from the saved value) so it's available before
+// the async settings load below. No slotId in bare.json → no pin, no slot_id sent.
+{
+	const _slotParam = new URLSearchParams(location.search).get("slotId");
+	if (_slotParam != null && _slotParam !== '' && Number.isInteger(Number(_slotParam))) {
+		window.__settings.slotId = Number(_slotParam);
+	}
+}
+
 /* ------------------------------------------------------------------ */
 /* DOM refs                                                           */
 /* ------------------------------------------------------------------ */

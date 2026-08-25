@@ -45,6 +45,11 @@
   --text-tert:    #888888;
   --muted:        #aaa;
 
+  /* ── Icons (dark grey in light mode) ── */
+  --icon:         #555555;
+  --icon-hover:   #2b2b2b;
+  --icon-active:  #111111;
+
   /* ── Accent ── */
   --accent:       #4a90d9;
 
@@ -68,12 +73,25 @@
   --text-sec:     #c0c0c0;
   --text-tert:    #aaa;
   --muted:        #707070;
+
+  /* ── Icons ── */
+  --icon:         #8a8a8a;
+  --icon-hover:   #d5d5d5;
+  --icon-active:  #f5f5f5;
+
   --accent:       #79b8ff;
   --diff-add:     #5ec97e;
   --diff-remove:  #ff8a8a;
   --ctx-fill:     #707070;
   --ctx-empty:    #222222;
 }
+
+
+/* ═══════════════════════════════════════════
+   Icon strokes — thinner lines for a sharper look (both themes)
+   ═══════════════════════════════════════════ */
+
+svg { stroke-width: 1.5; }
 
 
 /* ═══════════════════════════════════════════
@@ -288,7 +306,7 @@ textarea:focus {
   background: transparent;
   border: none;
   border-radius: 5px;
-  color: var(--text-tert);
+  color: var(--icon);
   cursor: pointer;
   opacity: 0;
   transition: opacity 0.15s, color 0.15s;
@@ -298,7 +316,7 @@ textarea:focus {
   opacity: 1;
 }
 .code-copy-btn:hover {
-  color: var(--text-sec);
+  color: var(--icon-hover);
 }
 
 .markdown-content blockquote {
@@ -386,7 +404,7 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 14px 2px 0 2px;
+  padding: 19px 2px 0 2px;
   background: transparent;
   flex-shrink: 0;
 }
@@ -878,7 +896,7 @@ kbd.shortcut-badge {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 16px;
 }
 
 #prompt-wrapper {
@@ -923,7 +941,7 @@ kbd.shortcut-badge {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--muted);
+  color: var(--icon);
   cursor: pointer;
   transition: color 0.15s ease, opacity 0.15s ease;
   outline: none;
@@ -947,8 +965,8 @@ kbd.shortcut-badge {
   box-shadow: none;
 }
 
-#stop-btn:hover { color: var(--text-sec); }
-#stop-btn:active { color: var(--text-hover); }
+#stop-btn:hover { color: var(--icon-hover); }
+#stop-btn:active { color: var(--icon-active); }
 
 #submit-btn {
   position: absolute;
@@ -959,7 +977,7 @@ kbd.shortcut-badge {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--muted);
+  color: var(--icon);
   cursor: pointer;
   transition: color 0.15s ease, opacity 0.15s ease;
   outline: none;
@@ -983,8 +1001,8 @@ kbd.shortcut-badge {
   box-shadow: none;
 }
 
-#submit-btn:hover { color: var(--text-sec); }
-#submit-btn:active { color: var(--text-hover); }
+#submit-btn:hover { color: var(--icon-hover); }
+#submit-btn:active { color: var(--icon-active); }
 
 
 /* ═══════════════════════════════════════════
@@ -998,7 +1016,7 @@ kbd.shortcut-badge {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--icon);
   cursor: pointer;
   transition: color 0.15s ease;
   outline: none;
@@ -1009,11 +1027,11 @@ kbd.shortcut-badge {
 
 #folder-btn:hover,
 #new-session-btn:hover,
-#session-btns button:hover { color: var(--text-sec); }
+#session-btns button:hover { color: var(--icon-hover); }
 
 #folder-btn:active,
 #new-session-btn:active,
-#session-btns button:active { color: var(--text-hover); }
+#session-btns button:active { color: var(--icon-active); }
 
 /* ── Folder shimmer (prompts user to select a folder) ── */
 @keyframes folder-shimmer {
@@ -1032,7 +1050,7 @@ kbd.shortcut-badge {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--icon);
   cursor: pointer;
   transition: color 0.15s ease;
   outline: none;
@@ -1043,8 +1061,8 @@ kbd.shortcut-badge {
   margin-top: 11px;
 }
 
-#settings-btn:hover { color: var(--text-sec); }
-#settings-btn:active { color: var(--text-hover); }
+#settings-btn:hover { color: var(--icon-hover); }
+#settings-btn:active { color: var(--icon-active); }
 
 /* ═══════════════════════════════════════════
    Connection Section
@@ -1181,7 +1199,7 @@ kbd.shortcut-badge {
   border: 0;
   border-radius: 6px;
   background: transparent;
-  color: var(--muted);
+  color: var(--icon);
   cursor: pointer;
   transition: color 0.15s ease;
   outline: none;
@@ -1189,8 +1207,8 @@ kbd.shortcut-badge {
   appearance: none;
 }
 
-#settings-close:hover { color: var(--text-sec); }
-#settings-close:active { color: var(--text-hover); }
+#settings-close:hover { color: var(--icon-hover); }
+#settings-close:active { color: var(--icon-active); }
 
 #settings-content {
   flex: 1;
@@ -1529,16 +1547,16 @@ kbd.shortcut-badge {
 }
 #history-close-btn {
   padding: 4px; border: 0; border-radius: 6px;
-  background: transparent; color: var(--muted); cursor: pointer;
+  background: transparent; color: var(--icon); cursor: pointer;
   transition: color 0.15s ease;
   -webkit-appearance: none; appearance: none;
 }
-#history-close-btn:hover { color: var(--text); }
+#history-close-btn:hover { color: var(--icon-hover); }
 #history-modal-search {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 18px;
   border-bottom: 1px solid var(--border);
-  color: var(--muted);
+  color: var(--icon);
 }
 #history-modal-search svg { flex-shrink: 0; }
 #history-search {
@@ -1569,12 +1587,12 @@ kbd.shortcut-badge {
 }
 .history-item-delete {
   padding: 3px; border: 0; border-radius: 4px;
-  background: transparent; color: var(--muted); cursor: pointer;
+  background: transparent; color: var(--icon); cursor: pointer;
   transition: color 0.15s ease; opacity: 0;
   -webkit-appearance: none; appearance: none; flex-shrink: 0;
 }
 .history-item:hover .history-item-delete { opacity: 1; }
-.history-item-delete:hover { color: var(--text-sec); }
+.history-item-delete:hover { color: var(--icon-hover); }
 .history-empty {
   padding: 24px 18px; text-align: center;
   font-size: 13px; color: var(--muted);

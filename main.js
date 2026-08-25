@@ -468,7 +468,12 @@ app.whenReady().then(() => {
 	// Pass saved theme as a query param so an inline script in <head>
 	// can set data-theme synchronously before the first paint.
 	const indexPath = path.join(RESOURCES, "index.html");
-	const themedUrl = `file://${indexPath}?theme=${savedTheme}`;
+	// Pass theme + optional slot pin as query params so the renderer can read
+	// them synchronously before paint (saved settings load async via IPC).
+	// slotId is per-machine (bare.json) — absent for stock users → no param.
+	const _rawSlot = settings?.slotId;
+	const slotPin = _rawSlot != null && _rawSlot !== '' && Number.isInteger(Number(_rawSlot)) ? Number(_rawSlot) : null;
+	const themedUrl = `file://${indexPath}?theme=${savedTheme}${slotPin != null ? `&slotId=${slotPin}` : ''}`;
 	win.loadURL(themedUrl);
 
 	win.webContents.on("before-input-event", (_event, { key }) => {
@@ -477,10 +482,15 @@ app.whenReady().then(() => {
 		}
 	});
 
-	// Warm up the Supra title model only after the app is fully up, so the
-	// load never blocks or slows down the initial window.
-	setTimeout(() => { titleGen.ensureLoaded().catch(() => {}); }, 1000);
+	// Warm up the Supra title model in a background worker thread (see
+	// title-gen.cjs). Wait until the window has finished loading, then add
+	// a delay, so the native binary load never contends with startup / first
+	// paint. All heavy work happens off the main thread, so a slow load can
+	// no longer freeze the UI.
+	win.webContents.once("did-stop-loading", () => {
+		setTimeout(() => { titleGen.ensureLoaded().catch(() => {}); }, 3000);
+	});
 });
 
-app.on("will-quit", () => {});
+app.on("will-quit", () => { titleGen.shutdown(); });
 app.on("window-all-closed", () => app.quit());

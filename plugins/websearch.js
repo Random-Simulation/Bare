@@ -25,10 +25,12 @@ function loadApiConfig(settingsFile) {
 				host: s.serverHost || "127.0.0.1",
 				port: s.serverPort || "8080",
 				model: s.model || "",
+				// Optional slot pin for shared servers — see getBodyExtras() in utils.js
+				slotId: (s.slotId != null && s.slotId !== '' && Number.isInteger(Number(s.slotId))) ? Number(s.slotId) : undefined,
 			};
 		}
 	} catch { /* ignore */ }
-	return { host: "127.0.0.1", port: "8080", model: "" };
+	return { host: "127.0.0.1", port: "8080", model: "", slotId: undefined };
 }
 
 const UA = (() => {
@@ -154,6 +156,7 @@ async function summarize(rawContent, intent, settingsFile) {
 		}
 	};
 	if (config.model) body.model = config.model;
+	if (config.slotId !== undefined) body.slot_id = config.slotId;
 
 	const res = await fetch(url, {
 		method: "POST",

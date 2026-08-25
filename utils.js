@@ -131,6 +131,13 @@ export function getBodyExtras() {
 	if (window.__settings.model) {
 		extras.model = window.__settings.model;
 	}
+	// Optional llama.cpp slot pin for shared servers: set "slotId" in your
+	// local %APPDATA%\bare\bare.json (per-machine, not in the repo).
+	// When absent, no slot_id is sent — stock behavior.
+	const slotId = Number(window.__settings.slotId);
+	if (window.__settings.slotId != null && window.__settings.slotId !== '' && Number.isInteger(slotId) && slotId >= 0) {
+		extras.slot_id = slotId;
+	}
 	return extras;
 }
 
@@ -226,12 +233,6 @@ export function truncateToolOutput(content, isRead = false) {
 	return content;
 }
 
-/** Format token counts (e.g. 1200 → "1.2k") */
-export function formatTokenCount(n) {
-	if (n >= 1000) return (n / 1000).toFixed(1).replace(/\.0$/, "") + "k";
-	return String(n);
-}
-
 /** Escape HTML special characters */
 export function escHtml(s) {
 	return s
@@ -282,15 +283,6 @@ export function extractPartialArray(e, key) {
 	return items;
 }
 
-/** Format search queries for display */
-export function formatSearchQueries(queries) {
-	if (!queries || queries.length === 0) return '';
-	const q = queries[0];
-	const truncated = q.length > 60 ? q.substring(0, 60) + '...' : q;
-	const count = queries.length > 1 ? ` (+${queries.length - 1})` : '';
-	return `"${truncated}"${count}`;
-}
-
 /** Strip control chars and truncate excessively long lines */
 export function sanitizeToolOutput(text) {
 	if (typeof text !== 'string') return text;
@@ -316,7 +308,6 @@ export function sanitizeToolOutput(text) {
 let autoScroll = true;
 let scrollPending = false;
 
-export function getAutoScroll() { return autoScroll; }
 export function setAutoScroll(val) { autoScroll = val; }
 
 export function getScrollToBottom(chat) {

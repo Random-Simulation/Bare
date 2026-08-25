@@ -73,13 +73,14 @@ export async function getSystemPrompt() {
 	const shellHint = shellCmds ? `\n- Shell commands: ${shellCmds}` : '';
 
 	let rules = `## Rules
-- Autonomy: Execute full workflows autonomously inside the current directory; infer technical intent.
+- Autonomy: Execute full workflows autonomously inside the current directory.
+- Work quickly, absolute minimal verification/checking only - get to the result instead.
+- Do not hypothesis/think about things too much, quickly perform simple tests if unsure.
 - Keep files <500 lines, single-purpose. Use imports/exports.
 - Batch independent tool calls.
 - Before every tool call, write a very short sentence describing what you are about to do.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
 - For Math use $/$ KaTeX with LaTeX syntax for all equations.${shellHint}
-- Verify complex tasks using tools before calling finish_task.
 - On task completion: brief summary, then call finish_task.`;
 
 	if (safetyRules.length > 0) {

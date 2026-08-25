@@ -27,9 +27,16 @@ function clearWarning() {
 	if (_ctxToast) { _ctxToast.remove(); _ctxToast = null; }
 }
 
-/** Reset llamacpp server slots on startup so old context doesn't bleed through. */
+/** Reset llamacpp server slots on startup so old context doesn't bleed through.
+ * If this client pins a slot (slotId in bare.json, passed as ?slotId= by
+ * main.js), only erase OUR slot — the server may be shared with others. */
 if (isCtxAvailable()) {
-	fetch(electron.getApiUrl() + "/slots/reset", { method: "POST" })
+	const _slotParam = new URLSearchParams(location.search).get("slotId");
+	const _slotId = (_slotParam != null && _slotParam !== '' && Number.isInteger(Number(_slotParam))) ? Number(_slotParam) : null;
+	const resetUrl = _slotId !== null
+		? `${electron.getApiUrl()}/slots/${_slotId}?action=erase`
+		: `${electron.getApiUrl()}/slots/reset`;
+	fetch(resetUrl, { method: "POST" })
 		.catch(() => {}); // silently ignore if server isn't running yet
 }
 

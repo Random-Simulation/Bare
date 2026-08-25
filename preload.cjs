@@ -19,6 +19,8 @@ const INVOKE_CHANNELS = new Set([
 	'session:load',
 	'session:clear',
 	'session:save-full',
+	'session:load-full',
+	'session:clear-full',
 	'settings:save',
 	'settings:load',
 	'sessions:list',

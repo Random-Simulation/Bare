@@ -1,69 +1,163 @@
 /* ------------------------------------------------------------------ */
 /* SupraTitle-50M local CPU title generator                           */
-/* Loads the GGUF model once, then generates titles via llama.cpp     */
+/*                                                                    */
+/* The GGUF model is loaded and run in a dedicated worker thread      */
+/* (see title-model-worker.cjs). This module only spawns the worker,  */
+/* sends messages and awaits replies — so llama.cpp native work never */
+/* blocks Electron's main event loop.                                 */
 /* ------------------------------------------------------------------ */
 
 const path = require("path");
-
-let _model = null;
-let _completion = null;
-let _ready = false;
-let _loading = null;
+const { Worker } = require("worker_threads");
 
 const MODEL_PATH = path.join(__dirname, "assets", "models", "SupraTitle-50M-Q8_0.gguf");
+const WORKER_PATH = path.join(__dirname, "title-model-worker.cjs");
+
+// First load also pulls in the native binary — be generous.
+const LOAD_TIMEOUT_MS = 120000;
+const GEN_TIMEOUT_MS = 30000;
+
+const _state = {
+  worker: null,
+  ready: false,
+  loading: null,       // in-flight ensureLoaded() promise
+  readyResolve: null,
+  readyReject: null,
+  loadTimer: null,
+};
+let _nextId = 1;
+const _pending = new Map(); // id -> { resolve, reject, timer }
+
+function _spawn() {
+  const worker = new Worker(WORKER_PATH, { workerData: { modelPath: MODEL_PATH } });
+  worker.on("message", _onMessage);
+  worker.on("error", (err) => {
+    console.error("[title-gen] Worker error:", err.message);
+    _teardown(`Worker error: ${err.message}`);
+  });
+  worker.on("exit", (code) => {
+    if (code !== 0) _teardown(`Worker exited (code ${code})`);
+    else _state.worker = null; // clean shutdown (e.g. app quit)
+  });
+  _state.worker = worker;
+}
+
+function _onMessage(msg) {
+  if (!msg) return;
+  if (msg.type === "ready") {
+    _state.ready = true;
+    if (_state.loadTimer) { clearTimeout(_state.loadTimer); _state.loadTimer = null; }
+    const resolve = _state.readyResolve;
+    _state.loading = null;
+    _state.readyResolve = null;
+    _state.readyReject = null;
+    if (resolve) resolve();
+    return;
+  }
+  if (msg.type === "result" || msg.type === "error") {
+    if (msg.error && msg.id == null) {
+      // Fatal error during load (no id) — fail the ensureLoaded() promise.
+      _teardown(msg.error);
+      return;
+    }
+    const p = _pending.get(msg.id);
+    if (!p) return;
+    _pending.delete(msg.id);
+    clearTimeout(p.timer);
+    if (msg.type === "result") p.resolve(msg.title);
+    else p.reject(new Error(msg.error || "Title generation failed"));
+  }
+}
 
 /**
- * Lazy-load the model on first call.
- * Returns a promise that resolves when the model is ready.
+ * Reject everything in flight, drop the worker, and allow a retry.
+ */
+function _teardown(reason) {
+  if (_state.loadTimer) { clearTimeout(_state.loadTimer); _state.loadTimer = null; }
+  if (_state.worker) {
+    _state.worker.removeAllListeners();
+    try { _state.worker.terminate(); } catch {}
+    _state.worker = null;
+  }
+  if (_state.ready) console.warn("[title-gen] Title model worker lost:", reason, "— will respawn on next use");
+  _state.ready = false;
+  const reject = _state.readyReject;
+  _state.loading = null;
+  _state.readyResolve = null;
+  _state.readyReject = null;
+  if (reject) reject(new Error(reason || "Title model worker terminated"));
+  for (const p of _pending.values()) {
+    clearTimeout(p.timer);
+    p.reject(new Error(reason || "Title model worker terminated"));
+  }
+  _pending.clear();
+}
+
+/**
+ * Ensure the worker is up and the model is loaded.
+ * Runs entirely off the main thread; this only resolves when ready.
  */
 async function ensureLoaded() {
-  if (_ready) return;
-  if (_loading) return _loading;
+  if (_state.ready) return;
+  if (_state.loading) return _state.loading;
 
-  _loading = (async () => {
+  _state.loading = new Promise((resolve, reject) => {
+    _state.readyResolve = resolve;
+    _state.readyReject = reject;
+    _state.loadTimer = setTimeout(() => {
+      console.error(`[title-gen] Model load timed out after ${LOAD_TIMEOUT_MS}ms`);
+      _teardown(`Model load timed out after ${LOAD_TIMEOUT_MS}ms`);
+    }, LOAD_TIMEOUT_MS);
     try {
-      console.log("[title-gen] Loading SupraTitle-50M model from:", MODEL_PATH);
-      const { getLlama, LlamaCompletion } = await import("node-llama-cpp");
-      const llama = await getLlama();
-      const model = await llama.loadModel({ modelPath: MODEL_PATH });
-      const context = await model.createContext();
-      _completion = new LlamaCompletion({ contextSequence: context.getSequence() });
-      _model = model;
-      _ready = true;
-      console.log("[title-gen] Model loaded successfully.");
+      _spawn();
     } catch (err) {
-      console.error("[title-gen] Failed to load model:", err.message);
-      _loading = null; // allow retry
-      throw err;
+      _teardown(`Failed to spawn worker: ${err.message}`);
     }
-  })();
-
-  return _loading;
+  });
+  return _state.loading;
 }
 
 /**
  * Generate a title from a user message.
- * Uses the SupraTitle prompt format: "User: {message}\nTitle: "
+ * Resolves with the cleaned title string. Rejects on failure/timeout so
+ * callers can fall back (e.g. to the HTTP title endpoint).
  */
 async function generateTitle(userMessage) {
   await ensureLoaded();
 
-  const prompt = `User: ${userMessage}\nTitle: `;
-
-  const title = await _completion.generateCompletion(prompt, {
-    maxTokens: 10,
-    temperature: 0.55,
-    topK: 15,
-    topP: 0.85,
-    repeatPenalty: {
-      lastTokens: 64,
-      penalty: 1.35,
-    },
-    trimWhitespaceSuffix: true,
+  const id = _nextId++;
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      _pending.delete(id);
+      reject(new Error(`Title generation timed out after ${GEN_TIMEOUT_MS}ms`));
+    }, GEN_TIMEOUT_MS);
+    _pending.set(id, { resolve, reject, timer });
+    try {
+      _state.worker.postMessage({ type: "generate", id, message: String(userMessage || "").slice(0, 300) });
+    } catch (err) {
+      _pending.delete(id);
+      clearTimeout(timer);
+      reject(new Error(`Worker unavailable: ${err.message}`));
+    }
   });
-
-  // Clean up: trim, remove trailing punctuation duplicates
-  return title.trim().replace(/[.\n]+$/, "") || "Untitled Chat";
 }
 
-module.exports = { generateTitle, ensureLoaded };
+/**
+ * Cleanly terminate the worker (called on app quit).
+ */
+function shutdown() {
+  if (_state.loadTimer) { clearTimeout(_state.loadTimer); _state.loadTimer = null; }
+  if (_state.worker) {
+    _state.worker.removeAllListeners();
+    try { _state.worker.terminate(); } catch {}
+    _state.worker = null;
+  }
+  _state.ready = false;
+  for (const p of _pending.values()) {
+    clearTimeout(p.timer);
+    p.reject(new Error("App shutting down"));
+  }
+  _pending.clear();
+}
+
+module.exports = { generateTitle, ensureLoaded, shutdown };

@@ -209,7 +209,7 @@ prompt.addEventListener('keydown', (e) => {
 
 prompt.addEventListener('input', () => {
   prompt.style.height = 'auto';
-  prompt.style.height = Math.min(prompt.scrollHeight, 130) + 'px';
+  prompt.style.height = Math.min(prompt.scrollHeight, 240) + 'px';
   updateButtonVisibility();
   // Dismiss the "type a message" toast as soon as user starts typing
   clearTypeMessageToast();
