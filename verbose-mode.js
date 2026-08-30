@@ -305,7 +305,7 @@ function createToolBlockFromLog(evt) {
 export function applyVerboseMode() {
 	if (window.__isStreaming) {
 		window.__pendingVerbose = !!window.__settings?.verbose;
-		if (window.addToast && !window.__settings?.bareMode) {
+		if (window.addToast) {
 			window.addToast(
 				`Quiet ${!window.__pendingVerbose ? 'ON' : 'OFF'} — will apply when generation finishes`,
 				'',

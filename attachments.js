@@ -26,7 +26,7 @@ function fileToBase64(file) {
 async function handleDroppedFile(file, onUpdate) {
   const ext = '.' + file.name.split('.').pop().toLowerCase();
   if (file.size > MAX_FILE_SIZE) {
-    if (!window.__settings?.bareMode) addToast(`Skipped ${file.name} — too large (max 10 MB)`, 'warning', 4000);
+    addToast(`Skipped ${file.name} — too large (max 10 MB)`, 'warning', 4000);
     return;
   }
 
@@ -39,11 +39,11 @@ async function handleDroppedFile(file, onUpdate) {
       const content = await file.text();
       pendingAttachments.push({ type: 'text', name: file.name, content });
     } else {
-      if (!window.__settings?.bareMode) addToast(`Skipped ${file.name} — unsupported type`, 'warning', 3000);
+      addToast(`Skipped ${file.name} — unsupported type`, 'warning', 3000);
       return;
     }
   } catch (err) {
-    if (!window.__settings?.bareMode) addToast(`Failed to read ${file.name}`, 'error', 4000);
+    addToast(`Failed to read ${file.name}`, 'error', 4000);
     console.error('[drag-drop] read error:', err);
     return;
   }

@@ -7,7 +7,7 @@ window.BARE = {
 	// % context usage at which the warning toast shows and history is
 	// auto-truncated (llama.cpp only). Read by ctx-bar.js,
 	// agentic-loop.js, and context-truncation.js.
-	AUTO_TRUNCATE_THRESHOLD: 87.5,
+	AUTO_TRUNCATE_THRESHOLD: 85,
 
 	// Zone sizes (fraction of total messages at the initial split).
 	// Head is fixed forever once set; the tail re-anchors on every

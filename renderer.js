@@ -93,6 +93,18 @@ function requestStop() {
   }
 }
 
+// Steering interrupt: abort the in-flight stream WITHOUT stopping the loop.
+// isStreaming stays true, so agentic-loop detects __abortReason==='interrupt'
+// and salvages the partial turn (text + reasoning) then continues, letting the
+// just-queued message be injected at the top of the next iteration. This is
+// the "press Stop, then send" experience in a single action.
+function interruptForInjection() {
+  if (window.__currentAbort) {
+    window.__abortReason = 'interrupt';
+    window.__currentAbort.abort();
+  }
+}
+
 function doRequestStop() {
   requestStop();
   updateButtonVisibility();
@@ -162,6 +174,9 @@ function submitPrompt() {
   if (isStreaming) {
     queuedMessages.push({ text: fullText, displayText, images });
     addMsg('user', displayText);
+    // Interrupt the in-flight stream so this message is injected NOW
+    // (stop-then-submit semantics) instead of waiting for the turn to end.
+    interruptForInjection();
     prompt.value = '';
     prompt.style.height = 'auto';
     updateButtonVisibility();

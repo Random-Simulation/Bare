@@ -42,7 +42,6 @@ const DEFAULT_SETTINGS = {
 	restrictToWorkDir: false,
 	readOnly: false,
 	requireToolPermission: true,
-	bareMode: false,
 	verbose: true,
 	workdirWarningDismissed: false,
 	permWarningDismissed: false,

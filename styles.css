@@ -1,31 +1,4 @@
 /* ═══════════════════════════════════════════
-   BARE Mode — minimal UI (no toasts, no buttons, no warnings)
-   ═══════════════════════════════════════════ */
-
-/* Hide toast container (toasts, permission prompts, folder prompts, attachment toasts) */
-[data-bare-mode="true"] #toast-container {
-  display: none !important;
-}
-
-/* Hide send and stop buttons */
-[data-bare-mode="true"] #stop-btn,
-[data-bare-mode="true"] #submit-btn {
-  display: none !important;
-}
-
-/* Hide settings warnings */
-[data-bare-mode="true"] .settings-warning {
-  display: none !important;
-}
-
-/* Hide left button pane (history / new / temp / folder) */
-[data-bare-mode="true"] #left-pane,
-[data-bare-mode="true"] #session-btns {
-  display: none !important;
-}
-
-
-/* ═══════════════════════════════════════════
    Global Color Theme
    ═══════════════════════════════════════════ */
 

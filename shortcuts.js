@@ -2,7 +2,6 @@
 /* Keyboard shortcuts + toolbar buttons                                */
 /* ------------------------------------------------------------------ */
 
-import { applyBareMode } from './settings.js';
 import { applyVerboseMode } from './verbose-mode.js';
 
 const folderBtn = document.getElementById('folder-btn');
@@ -58,14 +57,12 @@ export function promptRestrictWorkDir(dir) {
 }
 
 function showWorkDirToast(dir) {
-  if (window.__settings?.bareMode) return;
   const name = dir.split(/[\\/]/).pop();
   const verb = window.__settings?.restrictToWorkDir ? 'Working in' : 'Starting in';
   addToast(verb + ' "' + name + '"', '', 3000);
 }
 
 function promptFolder() {
-  if (window.__settings?.bareMode) return;
   clearFolderPrompt();
   _folderPromptWasShown = true;
   _folderToast = document.createElement('div');
@@ -76,7 +73,6 @@ function promptFolder() {
 }
 
 function showTypeMessageToast() {
-  if (window.__settings?.bareMode) return;
   clearTypeMessageToast();
   _typeMessageToast = document.createElement('div');
   _typeMessageToast.className = 'toast-line shimmer';
@@ -159,7 +155,6 @@ async function pickFolderAndApply(onClearTypeMessageToast) {
 /* ------------------------------------------------------------------ */
 
 function showSafetyToast(text) {
-  if (window.__settings?.bareMode) return;
   addToast(text, '', 3000);
 }
 
@@ -272,18 +267,5 @@ export function initShortcuts(deps) {
       }
     }
 
-    // Ctrl+Shift+B — BARE mode toggle
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'B') {
-      e.preventDefault();
-      if (!window.__settings) return;
-      window.__settings.bareMode = !window.__settings.bareMode;
-      applyBareMode(window.__settings.bareMode);
-      const el = document.getElementById('bare-mode-toggle');
-      if (el) el.checked = window.__settings.bareMode;
-      window.electron.invoke('settings:save', window.__settings).catch(() => {});
-      if (!window.__settings.bareMode) {
-        showSafetyToast('Bare mode: OFF');
-      }
-    }
   });
 }

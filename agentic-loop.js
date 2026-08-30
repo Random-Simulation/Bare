@@ -82,6 +82,57 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
   let crashRetries = 0;
   const MAX_CRASH_RETRIES = 5;
 
+  // Salvage a partial stream (text + reasoning) into history, finalize the
+  // in-flight DOM nodes, and log the partial turn. Shared by the stop path
+  // (which then breaks) and the steering-interrupt path (which continues so a
+  // just-queued message is injected at the top of the next iteration). Tool
+  // calls are deliberately NOT attached: the tools never ran, and dangling
+  // tool_calls would break the request protocol.
+  function salvagePartialStream({ activeToolCalls, assistantText, thinkText, history, think, assistantMessageDiv }) {
+    salvagePartialAssistant({ activeToolCalls, assistantText, thinkText, history, includeToolCalls: false });
+    // Tell the model this turn was cut off, not finished. A partial visible
+    // reply with no annotation reads as a complete utterance, and the model
+    // then often wraps the conversation up early instead of continuing.
+    // History only — the UI bubble and event log keep the raw partial text,
+    // and the annotation persists with the saved history automatically.
+    if (assistantText.trim() && history[history.length - 1]?.role === 'assistant') {
+      const last = history[history.length - 1];
+      last.content = (last.content || '') +
+        ' [— output interrupted by user. Your previous reply was cut off; address their message and continue the task.]';
+    }
+    hideQuietStatus();
+    // Keep the thinking block if any thought text arrived (verbose mode)
+    if (think?.details) {
+      if (thinkText.trim()) {
+        think._rawContent = thinkText.trim();
+        think.summary.textContent = 'Thought Process';
+        think.summary.classList.remove('pulsing');
+        think.summary.classList.remove('processing');
+        if (think._isOpen) renderLazyContent(think, think.content);
+      } else {
+        think.details.remove();
+        think.details = null;
+      }
+    }
+    // Finalize (or drop) the partial assistant output div
+    if (assistantMessageDiv) {
+      if (assistantText.trim()) {
+        try {
+          renderMarkdownTo(assistantMessageDiv, assistantText.trim());
+        } catch {
+          assistantMessageDiv.innerHTML = `<pre style="white-space: pre-wrap;">${escHtml(assistantText)}</pre>`;
+        }
+        addCopyButtons(assistantMessageDiv);
+      } else {
+        assistantMessageDiv.remove();
+      }
+    }
+    // Log the partial turn so it survives re-render and app restart
+    if (thinkText.trim()) logThink(thinkText.trim(), !!think?._isOpen);
+    if (assistantText.trim()) logAssistantText(assistantText.trim());
+    scrollToBottom();
+  }
+
   while (isStreaming()) {
 
     /* --- inject queued user messages --- */
@@ -160,7 +211,7 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       if (perm === 'allow-all') {
         window.__settings.requireToolPermission = false;
         window.electron.invoke('settings:save', window.__settings).catch(() => {});
-        if (!window.__settings.bareMode) addToast('⚠ Tool permissions disabled — Bare will no longer ask', 'error', 4000);
+        addToast('⚠ Tool permissions disabled — Bare will no longer ask', 'error', 4000);
       }
       permissionCheckedToolIds.add(pid);
     }
@@ -175,13 +226,18 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
     }
 
     const messages = await buildMessages(history);
-    window.__currentAbort = new AbortController();
+    const currentAbort = new AbortController();
+    window.__currentAbort = currentAbort;
+    window.__abortReason = null; // clear any stale interrupt flag from a prior iteration
 
     try {
 
       /* --- fetch with timeout --- */
+      // Capture THIS iteration's controller: if the fetch is aborted before
+      // headers arrive (e.g. a steering interrupt), this timer is never
+      // cleared and must not be able to abort a later iteration's stream.
       const FETCH_TIMEOUT_MS = 120000;
-      const timeoutId = setTimeout(() => { window.__currentAbort.abort(); }, FETCH_TIMEOUT_MS);
+      const timeoutId = setTimeout(() => { currentAbort.abort(); }, FETCH_TIMEOUT_MS);
 
       const body = { messages, stream: true, tools, ...getBodyExtras() };
       const model = getModelParam();
@@ -600,54 +656,24 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
       }
 
       if (err.name === 'AbortError') {
+        // Read then clear the interrupt flag. A stop (isStreaming false)
+        // always wins over an interrupt; a plain timeout sets no flag.
+        const wasInterrupt = (window.__abortReason === 'interrupt');
+        window.__abortReason = null;
+
         if (!isStreaming()) {
           /* --- user pressed stop: preserve what was streamed so far --- */
-
-          // Push the partial assistant turn (text + reasoning) into history.
-          // Tool calls are deliberately NOT attached: the tools never ran,
-          // and dangling tool_calls would break the request protocol.
-          salvagePartialAssistant({ activeToolCalls, assistantText, thinkText, history, includeToolCalls: false });
-
-          hideQuietStatus();
-
-          // Keep the thinking block if any thought text arrived (verbose mode)
-          if (think?.details) {
-            if (thinkText.trim()) {
-              think._rawContent = thinkText.trim();
-              think.summary.textContent = 'Thought Process';
-              think.summary.classList.remove('pulsing');
-              think.summary.classList.remove('processing');
-              if (think._isOpen) renderLazyContent(think, think.content);
-            } else {
-              think.details.remove();
-              think.details = null;
-            }
-          }
-
-          // Finalize (or drop) the partial assistant output div
-          if (assistantMessageDiv) {
-            if (assistantText.trim()) {
-              try {
-                renderMarkdownTo(assistantMessageDiv, assistantText.trim());
-              } catch {
-                assistantMessageDiv.innerHTML = `<pre style="white-space: pre-wrap;">${escHtml(assistantText)}</pre>`;
-              }
-              addCopyButtons(assistantMessageDiv);
-            } else {
-              assistantMessageDiv.remove();
-              assistantMessageDiv = null;
-            }
-          }
-
-          // Log the partial turn so it survives re-render and app restart
-          if (thinkText.trim()) logThink(thinkText.trim(), !!think?._isOpen);
-          if (assistantText.trim()) logAssistantText(assistantText.trim());
-
+          salvagePartialStream({ activeToolCalls, assistantText, thinkText, history, think, assistantMessageDiv });
           const sysMsg = 'Generation stopped by user';
           logSystemMessage(sysMsg);
           addMsg('system', sysMsg);
-          scrollToBottom();
           break;
+        } else if (wasInterrupt) {
+          /* --- steering interrupt: salvage the partial turn, then continue
+               so the just-queued message is injected at the top of the next
+               iteration (stop-then-submit in one action) --- */
+          salvagePartialStream({ activeToolCalls, assistantText, thinkText, history, think, assistantMessageDiv });
+          continue;
         } else {
           err = new Error('Connection timed out after 120 seconds.');
         }

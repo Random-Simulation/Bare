@@ -13,7 +13,6 @@ window.__settings = {
 	restrictToWorkDir: false,
 	readOnly: false,
 	requireToolPermission: true,
-	bareMode: false,
 	verbose: true,
 	workdirWarningDismissed: false,
 	permWarningDismissed: false,
@@ -149,7 +148,6 @@ const workdirWarning = document.getElementById('workdir-warning');
 const readOnlyToggle = document.getElementById('read-only-toggle');
 const requirePermToggle = document.getElementById('require-perm-toggle');
 const permWarning = document.getElementById('perm-warning');
-const bareModeToggle = document.getElementById('bare-mode-toggle');
 const verboseToggle = document.getElementById('verbose-toggle');
 
 /* ------------------------------------------------------------------ */
@@ -216,12 +214,6 @@ export function applySettingsToUI() {
 		requirePermToggle.checked = window.__settings.requireToolPermission !== false;
 	}
 
-	// Restore bare mode
-	if (bareModeToggle) {
-		bareModeToggle.checked = !!window.__settings.bareMode;
-	}
-	applyBareMode(window.__settings.bareMode);
-
 	// Restore Quiet mode toggle (inverted: checked = Quiet ON = verbose OFF)
 	if (verboseToggle) {
 		verboseToggle.checked = !window.__settings.verbose;
@@ -251,11 +243,6 @@ function readSettingsFromUI() {
 	// require tool permission
 	if (requirePermToggle) {
 		window.__settings.requireToolPermission = requirePermToggle.checked;
-	}
-
-	// bare mode
-	if (bareModeToggle) {
-		window.__settings.bareMode = bareModeToggle.checked;
 	}
 
 	// Quiet mode toggle (inverted: checked = Quiet ON = verbose OFF)
@@ -352,41 +339,22 @@ restrictWorkdirToggle.addEventListener('change', () => {
 	}
 	// Replace previous toast so only one shows at a time
 	if (window.__workdirToast) { window.__workdirToast.remove(); }
-	if (!window.__settings.bareMode) {
-		if (window.__settings.restrictToWorkDir) {
-			window.__workdirToast = addToast('Restrict workdir: ON', '', 3000);
-		} else {
-			window.__workdirToast = addToast('⚠ Bare can now work outside the current directory', 'warning', 5000);
-		}
+	if (window.__settings.restrictToWorkDir) {
+		window.__workdirToast = addToast('Restrict workdir: ON', '', 3000);
+	} else {
+		window.__workdirToast = addToast('⚠ Bare can now work outside the current directory', 'warning', 5000);
 	}
 });
 
 readOnlyToggle.addEventListener('change', () => {
 	window.__settings.readOnly = readOnlyToggle.checked;
-	if (!window.__settings.bareMode) {
-		addToast(`Read-only: ${window.__settings.readOnly ? 'ON' : 'OFF'}`, '', 3000);
-	}
-});
-
-/* ------------------------------------------------------------------ */
-/* BARE Mode — toggle UI visibility                                   */
-/* ------------------------------------------------------------------ */
-export function applyBareMode(on) {
-	document.documentElement.setAttribute('data-bare-mode', on ? 'true' : 'false');
-}
-
-bareModeToggle.addEventListener('change', () => {
-	window.__settings.bareMode = bareModeToggle.checked;
-	applyBareMode(window.__settings.bareMode);
-	if (!window.__settings.bareMode) {
-		addToast('Bare mode: OFF', '', 3000);
-	}
+	addToast(`Read-only: ${window.__settings.readOnly ? 'ON' : 'OFF'}`, '', 3000);
 });
 
 verboseToggle.addEventListener('change', () => {
 	window.__settings.verbose = !verboseToggle.checked;  // inverted: checked = Quiet ON
 	const queued = applyVerboseMode();
-	if (!queued && !window.__settings.bareMode) {
+	if (!queued) {
 		addToast(`Quiet: ${verboseToggle.checked ? 'ON' : 'OFF'}`, '', 3000);
 	}
 });
@@ -402,14 +370,12 @@ requirePermToggle.addEventListener('change', () => {
 	}
 	// Replace previous toast so only one shows at a time
 	if (window.__permToast) { window.__permToast.remove(); }
-	if (!window.__settings.bareMode) {
-		if (window.__settings.requireToolPermission) {
-			// Turned ON — brief confirmation
-			window.__permToast = addToast('Tool permissions: ON', '', 3000);
-		} else {
-			// Turned OFF — show warning toast
-			window.__permToast = addToast('⚠ Bare can now run all tools without permission', 'warning', 5000);
-		}
+	if (window.__settings.requireToolPermission) {
+		// Turned ON — brief confirmation
+		window.__permToast = addToast('Tool permissions: ON', '', 3000);
+	} else {
+		// Turned OFF — show warning toast
+		window.__permToast = addToast('⚠ Bare can now run all tools without permission', 'warning', 5000);
 	}
 });
 
@@ -479,9 +445,6 @@ export async function initSettings() {
 		if ((window.__settings.theme || 'light') !== currentTheme) {
 			applyTheme(window.__settings.theme || 'light');
 		}
-		// Re-apply BARE mode overlay now that settings are loaded (main process
-		// already set the initial overlay, but this ensures renderer state is in sync).
-		applyBareMode(!!window.__settings.bareMode);
 		// Initialize tool log and apply verbose mode
 		initToolLog();
 		applyVerboseMode();

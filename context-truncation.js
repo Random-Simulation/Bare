@@ -143,10 +143,16 @@ function getMessageGroups(history, start, end) {
 }
 
 /**
- * Elide the entire skeleton zone [headEnd, tailStart): delete all its
- * messages and insert a single marker in their place. If the zone already
- * begins with a marker (from an earlier pass), its elided count is
- * absorbed so the history always holds exactly one marker.
+ * Elide the marked skeleton zone: delete the contiguous run of marked
+ * messages at [headEnd, ...) and insert a single marker in their place.
+ * If the zone already begins with a marker (from an earlier pass), its
+ * elided count is absorbed so the history always holds exactly one marker.
+ *
+ * Only the marked run is removed (clamped to tailStart). After a reload
+ * (resetTruncationState) the tail anchor can lie beyond the marked zone;
+ * the unmarked full messages in between (saved mid-session) survive and
+ * join the new tail, converging on later passes. In normal operation the
+ * run always extends to tailStart, so behaviour is unchanged.
  *
  * After the call, the zone is [headEnd, headEnd+1) and the old tail
  * starts at headEnd+1.
@@ -158,7 +164,10 @@ function elideZone(history) {
 		priorElided = history[_state.headEnd]._elidedCount || 0;
 		hadMarker = true;
 	}
-	const removed = _state.tailStart - _state.headEnd;
+	let zoneEnd = _state.headEnd;
+	while (zoneEnd < _state.tailStart &&
+		(history[zoneEnd]._skeleton === true || history[zoneEnd]._isContextSeparator === true)) zoneEnd++;
+	const removed = zoneEnd - _state.headEnd;
 	// The prior marker itself is not an elided message — don't count it.
 	const total = priorElided + removed - (hadMarker ? 1 : 0);
 
