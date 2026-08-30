@@ -468,12 +468,7 @@ app.whenReady().then(() => {
 	// Pass saved theme as a query param so an inline script in <head>
 	// can set data-theme synchronously before the first paint.
 	const indexPath = path.join(RESOURCES, "index.html");
-	// Pass theme + optional slot pin as query params so the renderer can read
-	// them synchronously before paint (saved settings load async via IPC).
-	// slotId is per-machine (bare.json) — absent for stock users → no param.
-	const _rawSlot = settings?.slotId;
-	const slotPin = _rawSlot != null && _rawSlot !== '' && Number.isInteger(Number(_rawSlot)) ? Number(_rawSlot) : null;
-	const themedUrl = `file://${indexPath}?theme=${savedTheme}${slotPin != null ? `&slotId=${slotPin}` : ''}`;
+	const themedUrl = `file://${indexPath}?theme=${savedTheme}`;
 	win.loadURL(themedUrl);
 
 	win.webContents.on("before-input-event", (_event, { key }) => {

@@ -38,6 +38,17 @@ async function getPromptAddition() {
 	return _promptAddition;
 }
 
+/** Shell-specific command guidance for the system prompt */
+function getShellRules(shellName) {
+	if (!shellName || !SHELL_CMDS[shellName]) return [];
+	const rules = [`- Shell commands (${shellName}): ${SHELL_CMDS[shellName]}. The bash tool returns combined stdout+stderr.`];
+	if (shellName === 'cmd.exe') {
+		rules.push('- Keep bash commands single-line where possible (cmd.exe syntax: dir, findstr, %VAR%, 2>nul).');
+		rules.push('- For multi-line programs (python, node, etc.), write the code to a file first, then run that file — more reliable and easier to debug than inlining. Inline multi-line is also supported.');
+	}
+	return rules;
+}
+
 /** Build dynamic safety rules based on current settings */
 function getSafetyRules() {
 	const rules = [];
@@ -69,19 +80,18 @@ export async function getSystemPrompt() {
 	// Extract shell name from platform string like "Windows (cmd.exe)"
 	const shellMatch = platform.match(/\(([^)]+)\)/);
 	const shellName = shellMatch ? shellMatch[1] : null;
-	const shellCmds = shellName ? (SHELL_CMDS[shellName] || '') : '';
-	const shellHint = shellCmds ? `\n- Shell commands: ${shellCmds}` : '';
 
 	let rules = `## Rules
-- Autonomy: Execute full workflows autonomously inside the current directory.
-- Work quickly, absolute minimal verification/checking only - get to the result instead.
-- Do not hypothesis/think about things too much, quickly perform simple tests if unsure.
-- Keep files <500 lines, single-purpose. Use imports/exports.
-- Batch independent tool calls.
+- Work in the current directory. Start with read(.) for agentic work.
 - Before every tool call, write a very short sentence describing what you are about to do.
+- Keep files <500 lines, single-purpose.
+- Batch independent tool calls.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
-- For Math use $/$ KaTeX with LaTeX syntax for all equations.${shellHint}
+- For Math use $/$ KaTeX with LaTeX syntax for all equations.
 - On task completion: brief summary, then call finish_task.`;
+
+	const shellRules = getShellRules(shellName);
+	if (shellRules.length) rules += '\n' + shellRules.join('\n');
 
 	if (safetyRules.length > 0) {
 		rules += '\n\n## Active Safety Restrictions\n' + safetyRules.join('\n');

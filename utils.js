@@ -131,13 +131,6 @@ export function getBodyExtras() {
 	if (window.__settings.model) {
 		extras.model = window.__settings.model;
 	}
-	// Optional llama.cpp slot pin for shared servers: set "slotId" in your
-	// local %APPDATA%\bare\bare.json (per-machine, not in the repo).
-	// When absent, no slot_id is sent — stock behavior.
-	const slotId = Number(window.__settings.slotId);
-	if (window.__settings.slotId != null && window.__settings.slotId !== '' && Number.isInteger(slotId) && slotId >= 0) {
-		extras.slot_id = slotId;
-	}
 	return extras;
 }
 

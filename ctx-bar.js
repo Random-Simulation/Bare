@@ -27,19 +27,6 @@ function clearWarning() {
 	if (_ctxToast) { _ctxToast.remove(); _ctxToast = null; }
 }
 
-/** Reset llamacpp server slots on startup so old context doesn't bleed through.
- * If this client pins a slot (slotId in bare.json, passed as ?slotId= by
- * main.js), only erase OUR slot — the server may be shared with others. */
-if (isCtxAvailable()) {
-	const _slotParam = new URLSearchParams(location.search).get("slotId");
-	const _slotId = (_slotParam != null && _slotParam !== '' && Number.isInteger(Number(_slotParam))) ? Number(_slotParam) : null;
-	const resetUrl = _slotId !== null
-		? `${electron.getApiUrl()}/slots/${_slotId}?action=erase`
-		: `${electron.getApiUrl()}/slots/reset`;
-	fetch(resetUrl, { method: "POST" })
-		.catch(() => {}); // silently ignore if server isn't running yet
-}
-
 // Set the flag immediately so the first poll shows 0%.
 window.resetContextBar();
 
@@ -50,14 +37,17 @@ async function pollContext() {
 		if (!res.ok) return;
 		const slots = await res.json();
 
+		// Pooled (kvunified) server: usage spans all slots, but capacity
+		// (n_ctx) is the shared pool — count it once, not per slot.
 		let used = 0;
-		let max = 1;
+		let max = 0;
 
 		for (const slot of slots) {
 			const decodedTokens = slot.next_token?.[0]?.n_decoded ?? slot.n_decoded ?? slot.n_predicted ?? 0;
 			used += (slot.n_prompt_tokens || 0) + decodedTokens;
-			if (slot.n_ctx) max = slot.n_ctx;
+			max = Math.max(max, slot.n_ctx || 0);
 		}
+		if (max === 0) return;
 
 		const pct = Math.min((used / max) * 100, 100);
 

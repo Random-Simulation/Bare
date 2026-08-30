@@ -26,7 +26,7 @@ export function resetSession(deps) {
 	window.__seq = 0;
 	window.__order = 0;
 
-	resetTruncationState();
+	resetTruncationState(history);
 
 	if (window.resetContextBar) window.resetContextBar();
 	if (deps.resetFolderPrompt) deps.resetFolderPrompt();
@@ -49,7 +49,9 @@ export function loadHistoryIntoState(data) {
 	window.__seq = 0;
 	window.__order = 0;
 
-	resetTruncationState();
+	// Restore zone state from persisted skeleton marks (loaded sessions
+	// continue the progression — a fresh re-split would shrink the head)
+	resetTruncationState(history);
 
 	const s = window.__session;
 	s.currentHistoryId = data.id;

@@ -2,25 +2,41 @@
  * Progressive zone-based context truncation.
  *
  * The history is always structured as:
- *   [HEAD (full)] [SKELETON (summarized)] [TAIL (full)]
+ *   [HEAD (full)] [SKELETON (stubbed)] [TAIL (full)]
  *
- * Zones shrink over successive passes until context is under threshold:
+ * Pass 1 (context > threshold, first time):
+ *   HEAD     = first 17.5% of messages (group-aligned) — fixed FOREVER
+ *   TAIL     = last 25% of messages (group-aligned)
+ *   SKELETON = the middle: thinking stripped, tool results stubbed in place
  *
- *   Pass 1 (ctx > 87.5%):
- *     Split into head (17.5%) / skeleton (60%) / tail (22.5%).
- *     Summarize skeleton in-place (elide tool results, drop reasoning).
+ * Pass 2+ (context > threshold again):
+ *   a) HEAD stays untouched (fixed forever)
+ *   b) SKELETON is elided: deleted and replaced by a single
+ *      "--- N messages elided ---" marker (written once — later passes
+ *      only update its count in place)
+ *   c) the old TAIL is promoted to SKELETON (thinking stripped, tool
+ *      results stubbed)
+ *   d) everything appended since the last pass becomes the new TAIL and
+ *      is kept exactly as-is
  *
- *   Pass 2–6 (ctx > 50%):
- *     Shrink head by 3.5% and tail by 4.5% each pass.
- *     Converted messages are summarized in-place (grow skeleton outward).
+ * LIVE-TOOL INVARIANT: messages appended after the last pass (the live
+ * turn and its tool results) always land in the new tail and are NEVER
+ * stubbed or deleted. Only historic messages — a full context cycle old
+ * at the moment they are stubbed — ever become skeleton. A forced
+ * re-pass with no new messages (overflow retry) elides the skeleton only
+ * and never touches the tail.
  *
- *   Pass 7+ (ctx > 50%, head=0, tail=0):
- *     Prune the middle 50% of the skeleton.
- *     Keep first N messages (anchor) + last portion.
- *     Insert "[N messages elided]" separator.
+ * Zone boundaries are group-aligned (an assistant message + its tool
+ * results move as one unit), so eliding the skeleton never leaves a
+ * dangling tool_call or an orphan tool result.
  *
- * KV-cache friendly: the head prefix stays stable across passes,
- * so llama.cpp can reuse cached KV for the unchanged prefix.
+ * State survives reloads: the skeleton zone is marked in the history
+ * itself (_skeleton flag / separator marker), so resetTruncationState()
+ * re-derives it from a loaded session instead of re-splitting — which
+ * would break the fixed head.
+ *
+ * KV-cache friendly: the head prefix is stable across passes, so the
+ * server can reuse cached KV for the unchanged prefix.
  */
 
 /* ------------------------------------------------------------------ */
@@ -29,13 +45,55 @@
 
 let _state = {
 	active: false,
-	headEnd: 0,     // messages [0, headEnd) are HEAD (full)
+	headEnd: 0,     // messages [0, headEnd) are HEAD (full, fixed)
 	tailStart: 0,   // messages [tailStart, n) are TAIL (full)
+	lastPassN: 0,   // history length at the time of the last pass
 };
 
-/** Reset state on new session or history load. */
-export function resetTruncationState() {
-	_state = { active: false, headEnd: 0, tailStart: 0 };
+/**
+ * Reset (or restore) truncation state.
+ *
+ * Pass the current history to restore zone state from persisted marks
+ * after a session load, so the progression continues instead of a
+ * fresh pass-1 re-split shrinking the fixed head.
+ *
+ * @param {Array} [history] - optional message history to restore from
+ */
+export function resetTruncationState(history) {
+	_state = {
+		active: false,
+		headEnd: 0,
+		tailStart: 0,
+		lastPassN: history ? history.length : 0,
+	};
+
+	if (!history || history.length === 0) return;
+
+	// The skeleton zone is a contiguous run of marked messages: the elided
+	// separator marker and/or in-place stubbed messages. Head and tail
+	// messages are never marked.
+	const isMarked = m => m._skeleton === true || m._isContextSeparator === true;
+	let zoneStart = history.findIndex(isMarked);
+	if (zoneStart === -1) return;
+
+	let zoneEnd = zoneStart;
+	while (zoneEnd < history.length && isMarked(history[zoneEnd])) zoneEnd++;
+
+	// Anchor the tail at the last complete group: the turn the model must
+	// respond to next survives at least one more pass after a reload.
+	const tailGroups = getMessageGroups(history, zoneEnd, history.length);
+	const tailStart = tailGroups.length > 0 ? tailGroups[tailGroups.length - 1].start : history.length;
+
+	// lastPassN = tailStart (NOT history.length): the region between the
+	// zone and the last group is unmarked full content saved mid-session.
+	// Treating it as "new tail" keeps it (and the last turn) intact until
+	// the model has had a pass to use them; it converges on later passes.
+	_state.active = true;
+	_state.headEnd = zoneStart;
+	_state.tailStart = tailStart;
+	_state.lastPassN = tailStart;
+
+	console.log(`[TRUNC] Restored state: Head: [0,${zoneStart}), Skeleton: [${zoneStart},${zoneEnd}), Tail: [${tailStart},${history.length})`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -43,7 +101,7 @@ export function resetTruncationState() {
 /* ------------------------------------------------------------------ */
 
 /**
- * Summarize a message in-place for the skeleton zone.
+ * Stub a message in-place for the skeleton zone.
  * - Assistant: drop reasoning (thinking)
  * - Tool: replace content with a short stub
  * - User: keep as-is
@@ -59,7 +117,8 @@ function summarizeInPlace(msg) {
 
 /**
  * Identify message groups starting at index `start` up to `end`.
- * A group is: a user message, or an assistant message + its tool results.
+ * A group is: a user message, or an assistant message + its tool results
+ * (as one unit, so boundaries never split call/result pairs).
  * Returns array of { start, end } (end is exclusive).
  */
 function getMessageGroups(history, start, end) {
@@ -67,30 +126,51 @@ function getMessageGroups(history, start, end) {
 	let i = start;
 	while (i < end) {
 		const msg = history[i];
-		if (msg.role === 'user') {
-			groups.push({ start: i, end: i + 1 });
-			i++;
-		} else if (msg.role === 'assistant') {
+		if (msg.role === 'assistant' && msg.tool_calls && msg.tool_calls.length > 0) {
+			const toolIds = new Set(msg.tool_calls.map(tc => tc.id));
 			let groupEnd = i + 1;
-			if (msg.tool_calls && msg.tool_calls.length > 0) {
-				const toolIds = new Set(msg.tool_calls.map(tc => tc.id));
-				while (groupEnd < end && history[groupEnd].role === 'tool' && toolIds.has(history[groupEnd].tool_call_id)) {
-					groupEnd++;
-				}
+			while (groupEnd < end && history[groupEnd].role === 'tool' && toolIds.has(history[groupEnd].tool_call_id)) {
+				groupEnd++;
 			}
 			groups.push({ start: i, end: groupEnd });
 			i = groupEnd;
-		} else if (msg.role === 'tool') {
-			// Orphan tool message — treat as single-item group
-			groups.push({ start: i, end: i + 1 });
-			i++;
 		} else {
-			// Context separator or other — skip
 			groups.push({ start: i, end: i + 1 });
 			i++;
 		}
 	}
 	return groups;
+}
+
+/**
+ * Elide the entire skeleton zone [headEnd, tailStart): delete all its
+ * messages and insert a single marker in their place. If the zone already
+ * begins with a marker (from an earlier pass), its elided count is
+ * absorbed so the history always holds exactly one marker.
+ *
+ * After the call, the zone is [headEnd, headEnd+1) and the old tail
+ * starts at headEnd+1.
+ */
+function elideZone(history) {
+	let priorElided = 0;
+	let hadMarker = false;
+	if (_state.headEnd < _state.tailStart && history[_state.headEnd]._isContextSeparator) {
+		priorElided = history[_state.headEnd]._elidedCount || 0;
+		hadMarker = true;
+	}
+	const removed = _state.tailStart - _state.headEnd;
+	// The prior marker itself is not an elided message — don't count it.
+	const total = priorElided + removed - (hadMarker ? 1 : 0);
+
+	history.splice(_state.headEnd, removed, {
+		role: 'user',
+		content: `--- ${total} messages elided ---`,
+		_isContextSeparator: true,
+		_skeleton: true,
+		_elidedCount: total,
+	});
+
+	_state.tailStart = _state.headEnd + 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -99,121 +179,112 @@ function getMessageGroups(history, start, end) {
 
 function doInitialSplit(history) {
 	const n = history.length;
-	const headEnd = Math.floor(n * window.BARE.TRUNC_HEAD_PCT);
-	const tailStart = n - Math.floor(n * window.BARE.TRUNC_TAIL_PCT);
+	const groups = getMessageGroups(history, 0, n);
 
-	if (tailStart <= headEnd) return false; // Not enough to split
+	// HEAD: first TRUNC_HEAD_PCT of messages, snapped to a full group
+	// boundary so the head never ends mid call/result pair.
+	const headRaw = Math.floor(n * window.BARE.TRUNC_HEAD_PCT);
+	let headEnd = 0;
+	for (const g of groups) {
+		if (g.end <= headRaw) headEnd = g.end;
+		else break;
+	}
 
-	// Mark and summarize skeleton zone
+	// TAIL: last TRUNC_TAIL_PCT of messages, snapped back to a full group
+	// boundary so the tail never starts mid call/result pair.
+	const tailRaw = n - Math.floor(n * window.BARE.TRUNC_TAIL_PCT);
+	let tailStart = n;
+	for (const g of groups) {
+		if (g.start >= tailRaw) {
+			tailStart = g.start;
+			break;
+		}
+	}
+
+	// Need a non-empty head and a non-empty skeleton to split.
+	if (headEnd === 0 || tailStart <= headEnd) return false;
+
+	// SKELETON: stub the middle in place (thinking stripped, tool results
+	// replaced with stubs). Messages stay in the array — pairing intact.
 	for (let i = headEnd; i < tailStart; i++) {
 		summarizeInPlace(history[i]);
 	}
 
-	_state = { active: true, headEnd, tailStart };
+	_state.active = true;
+	_state.headEnd = headEnd;
+	_state.tailStart = tailStart;
+	_state.lastPassN = n;
 
 	console.log(
-		`[TRUNC] Pass 1: split at ${n} msgs. Head: [0,${headEnd}), Skeleton: [${headEnd},${tailStart}), Tail: [${tailStart},${n})`
+		`[TRUNC] Pass 1: split at n=${n}. Head: [0,${headEnd}), Skeleton: [${headEnd},${tailStart}), Tail: [${tailStart},${n})`
 	);
 	return true;
 }
 
 /* ------------------------------------------------------------------ */
-/* Pass 2–6: Shrink head/tail                                         */
+/* Pass 2+: Advance zones                                             */
 /* ------------------------------------------------------------------ */
 
-function shrinkZones(history) {
-	const n = history.length;
-	if (_state.headEnd === 0 && _state.tailStart >= n) return false;
+/**
+ * Normal pass: new messages have arrived since the last pass.
+ *   b) elide skeleton -> single marker
+ *   c) old tail      -> promoted to skeleton (stubbed in place)
+ *   d) new messages  -> new tail, kept exactly as-is (live-turn safe)
+ */
+function advanceZones(history) {
+	// Old tail = [tailStart, lastPassN). It is promoted; everything from
+	// lastPassN onward (appended since) is the new tail and stays untouched.
+	const oldTailLen = _state.lastPassN - _state.tailStart;
 
-	let shrunk = false;
+	elideZone(history);
 
-	// Shrink head: convert last messages of head → skeleton
-	if (_state.headEnd > 0) {
-		const shrink = Math.min(_state.headEnd, Math.max(1, Math.floor(n * window.BARE.TRUNC_HEAD_SHRINK_PCT)));
-		for (let i = _state.headEnd - shrink; i < _state.headEnd; i++) {
-			summarizeInPlace(history[i]);
-		}
-		_state.headEnd -= shrink;
-		shrunk = true;
+	const stubStart = _state.headEnd + 1;
+	const stubEnd = stubStart + oldTailLen;
+	for (let i = stubStart; i < stubEnd; i++) {
+		summarizeInPlace(history[i]);
 	}
 
-	// Shrink tail: convert first messages of tail → skeleton
-	if (_state.tailStart < n) {
-		const tailLen = n - _state.tailStart;
-		const shrink = Math.min(tailLen, Math.max(1, Math.floor(n * window.BARE.TRUNC_TAIL_SHRINK_PCT)));
-		for (let i = _state.tailStart; i < _state.tailStart + shrink; i++) {
-			summarizeInPlace(history[i]);
-		}
-		_state.tailStart += shrink;
-		shrunk = true;
-	}
-
-	if (shrunk) {
-		console.log(
-			`[TRUNC] Shrink: Head: [0,${_state.headEnd}), Skeleton: [${_state.headEnd},${_state.tailStart}), Tail: [${_state.tailStart},${n})`
-		);
-	}
-	return shrunk;
-}
-
-/* ------------------------------------------------------------------ */
-/* Pass 7+: Prune skeleton middle                                     */
-/* ------------------------------------------------------------------ */
-
-function pruneSkeletonMiddle(history) {
-	const n = history.length;
-	const skeletonEnd = Math.min(_state.tailStart, n);
-	const skeletonCount = skeletonEnd;
-
-	if (skeletonCount < 8) return false; // Not enough to meaningfully prune
-
-	// Drop the middle 50% of the skeleton
-	const dropCount = Math.floor(skeletonCount * window.BARE.TRUNC_SKELETON_PRUNE_PCT);
-	if (dropCount < 2) return false;
-
-	// We want to drop from the middle: keep ~half at start, ~half at end
-	const keepHead = Math.floor((skeletonCount - dropCount) / 2);
-
-	// Find group boundaries in the drop region [keepHead, keepHead + dropCount)
-	const groups = getMessageGroups(history, keepHead, keepHead + dropCount);
-
-	// Snap to full groups
-	let dropped = 0;
-	let dropStartIdx = -1;
-	let dropEndIdx = -1;
-
-	for (const g of groups) {
-		const groupSize = g.end - g.start;
-		if (dropped + groupSize <= dropCount) {
-			if (dropStartIdx === -1) dropStartIdx = g.start;
-			dropped += groupSize;
-			dropEndIdx = g.end;
-		} else {
-			break;
-		}
-	}
-
-	if (dropStartIdx === -1 || dropEndIdx <= dropStartIdx) return false;
-
-	const actualDropped = dropEndIdx - dropStartIdx;
-
-	// Splice out the dropped messages
-	history.splice(dropStartIdx, actualDropped);
-
-	// Insert separator at the cut point
-	const separator = {
-		role: 'user',
-		content: `--- context boundary (${actualDropped} messages elided) ---`,
-		_isContextSeparator: true,
-	};
-	history.splice(dropStartIdx, 0, separator);
-
-	// Adjust tailStart: net change is (-actualDropped + 1 for separator)
-	_state.tailStart = _state.tailStart - actualDropped + 1;
+	_state.tailStart = stubEnd;
+	_state.lastPassN = history.length;
 
 	console.log(
-		`[TRUNC] Skeleton prune: dropped ${actualDropped} msgs from middle. New length: ${history.length}. Tail starts at: ${_state.tailStart}`
+		`[TRUNC] Advance: Head: [0,${_state.headEnd}), Skeleton: [${_state.headEnd},${_state.tailStart}), Tail: [${_state.tailStart},${history.length})`
 	);
+	return true;
+}
+
+/**
+ * Forced re-pass with no new messages (e.g. the server rejected the
+ * request again after an earlier pass). Free space WITHOUT touching the
+ * tail — the tail holds the live turn and its tool results.
+ */
+function forcedRepass(history) {
+	const n = history.length;
+	const zoneLen = _state.tailStart - _state.headEnd;
+
+	// The zone holds more than the bare marker (stubbed messages) —
+	// collapse it into the single marker.
+	if (zoneLen > 1) {
+		elideZone(history);
+		_state.lastPassN = history.length;
+		console.log(`[TRUNC] Forced re-pass: elided skeleton -> marker. Tail untouched: [${_state.tailStart},${history.length})`);
+		return true;
+	}
+
+	// The zone is the bare marker. Last resort: stub the tail itself,
+	// but keep the final group (the live turn the model must still
+	// respond to) intact so live tool results survive even here.
+	const tailGroups = getMessageGroups(history, _state.tailStart, n);
+	const liveStart = tailGroups.length > 0 ? tailGroups[tailGroups.length - 1].start : n;
+	if (liveStart <= _state.tailStart) return false; // tail IS the live turn — nothing to free
+
+	for (let i = _state.tailStart; i < liveStart; i++) {
+		summarizeInPlace(history[i]);
+	}
+
+	_state.tailStart = liveStart;
+	_state.lastPassN = history.length;
+	console.log(`[TRUNC] Forced re-pass (last resort): stubbed tail up to live turn. Tail: [${_state.tailStart},${history.length})`);
 	return true;
 }
 
@@ -226,28 +297,25 @@ function pruneSkeletonMiddle(history) {
  *
  * @param {Array} history - The message history array (mutated in-place)
  * @param {number} ctxPct - Current context usage percentage
- * @param {boolean} force - If true, perform next pass regardless of threshold
+ * @param {boolean} force - If true, perform a pass regardless of threshold
  * @returns {boolean} true if any truncation was performed
  */
 export function truncateContextIfNeeded(history, ctxPct, force = false) {
-	const threshold = force ? 0 : window.BARE.AUTO_TRUNCATE_THRESHOLD;
-	const pruneThreshold = window.BARE.SKELETON_PRUNE_THRESHOLD;
+	const threshold = window.BARE.AUTO_TRUNCATE_THRESHOLD;
 
-	// Pass 1: initial split
+	if (!force && ctxPct <= threshold) return false;
+
+	// Pass 1: initial split (only possible before any truncation).
 	if (!_state.active) {
-		if (!force && ctxPct <= threshold) return false;
 		if (history.length <= 10) return false;
 		return doInitialSplit(history);
 	}
 
-	// Already active: check if we need to shrink or prune
-	if (!force && ctxPct <= pruneThreshold) return false;
-
-	// Pass 2–6: shrink head/tail
-	if (_state.headEnd > 0 || _state.tailStart < history.length) {
-		return shrinkZones(history);
+	// Active: a new pass is a zone advance. If no new messages arrived
+	// since the last pass, this is a forced re-pass — elide the skeleton
+	// only, never the live tail.
+	if (history.length > _state.lastPassN) {
+		return advanceZones(history);
 	}
-
-	// Pass 7+: all skeleton — prune middle
-	return pruneSkeletonMiddle(history);
+	return forcedRepass(history);
 }

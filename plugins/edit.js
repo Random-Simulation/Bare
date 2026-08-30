@@ -7,7 +7,7 @@ module.exports = {
 		type: "function",
 		function: {
 			name: "edit",
-			description: "Replace exact text in a file. oldText must match exactly once — include surrounding context for uniqueness.",
+			description: "Replace exact text in a file. oldText must match uniquely. Reread files with read tool before using edit.",
 			parameters: {
 				type: "object",
 				properties: {
