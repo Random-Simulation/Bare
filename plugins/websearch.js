@@ -156,7 +156,7 @@ async function summarize(rawContent, intent, settingsFile) {
 		}
 	};
 	if (config.model) body.model = config.model;
-	if (config.slotId !== undefined) body.slot_id = config.slotId;
+	if (config.slotId !== undefined) body.id_slot = config.slotId;
 
 	const res = await fetch(url, {
 		method: "POST",

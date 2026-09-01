@@ -30,12 +30,28 @@ function clearWarning() {
 // Set the flag immediately so the first poll shows 0%.
 window.resetContextBar();
 
+// Optional slot pinning: when the user set a slot id (Settings → Slot),
+// track only that slot's usage so another app's slot never triggers our
+// bar or auto-truncation. Keep in sync with getSlotId() in utils.js.
+function getPinnedSlotId() {
+	const raw = window.__settings ? window.__settings.slotId : null;
+	if (raw === null || raw === undefined || raw === '') return null;
+	const n = Number(raw);
+	return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 async function pollContext() {
 	if (!isCtxAvailable()) return;
 	try {
 		const res = await fetch(electron.getApiUrl() + "/slots", { cache: "no-store" });
 		if (!res.ok) return;
-		const slots = await res.json();
+		const allSlots = await res.json();
+
+		const pinned = getPinnedSlotId();
+		const slots = pinned !== null
+			? allSlots.filter((s) => s.id === pinned)
+			: allSlots;
+		if (slots.length === 0) return;
 
 		// Pooled (kvunified) server: usage spans all slots, but capacity
 		// (n_ctx) is the shared pool — count it once, not per slot.

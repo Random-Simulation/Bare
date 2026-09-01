@@ -905,7 +905,8 @@ kbd.shortcut-badge {
 #prompt::-webkit-scrollbar { width: 6px; }
 #prompt::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 
-#stop-btn {
+#stop-btn,
+#interrupt-btn {
   position: absolute;
   right: 14px;
   top: 50%;
@@ -926,20 +927,25 @@ kbd.shortcut-badge {
   pointer-events: none;
 }
 
-#stop-btn.visible {
+#stop-btn.visible,
+#interrupt-btn.visible {
   opacity: 1;
   pointer-events: auto;
 }
 
 #stop-btn:focus,
-#stop-btn:focus-visible {
+#stop-btn:focus-visible,
+#interrupt-btn:focus,
+#interrupt-btn:focus-visible {
   outline: none;
   border: 0;
   box-shadow: none;
 }
 
-#stop-btn:hover { color: var(--icon-hover); }
-#stop-btn:active { color: var(--icon-active); }
+#stop-btn:hover,
+#interrupt-btn:hover { color: var(--icon-hover); }
+#stop-btn:active,
+#interrupt-btn:active { color: var(--icon-active); }
 
 #submit-btn {
   position: absolute;
@@ -1594,6 +1600,7 @@ html.temporary-session #folder-btn,
 html.temporary-session #new-session-btn,
 html.temporary-session #session-btns button,
 html.temporary-session #stop-btn,
+html.temporary-session #interrupt-btn,
 html.temporary-session #submit-btn,
 html.temporary-session #history-close-btn,
 html.temporary-session .history-item-delete {
@@ -1604,6 +1611,7 @@ html.temporary-session #folder-btn:hover,
 html.temporary-session #new-session-btn:hover,
 html.temporary-session #session-btns button:hover,
 html.temporary-session #stop-btn:hover,
+html.temporary-session #interrupt-btn:hover,
 html.temporary-session #submit-btn:hover,
 html.temporary-session #history-close-btn:hover,
 html.temporary-session .history-item-delete:hover {

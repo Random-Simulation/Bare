@@ -131,10 +131,29 @@ export function getBodyExtras() {
 	if (window.__settings.model) {
 		extras.model = window.__settings.model;
 	}
+	const slotId = getSlotId();
+	if (slotId !== null) {
+		extras.id_slot = slotId;
+	}
 	return extras;
 }
 
 export function getEndpoint() { return '/v1/chat/completions'; }
+
+/**
+ * Optional llama.cpp slot pinning (advanced setting, "Slot" in Settings).
+ * When set, every request carries `id_slot` and the llama.cpp server is
+ * forced to serve it on that slot (useful when several apps share one
+ * multi-slot server and must keep separate conversations). Returns the
+ * configured slot id as a non-negative integer, or null when unset or
+ * invalid — in which case the server assigns a slot automatically.
+ */
+export function getSlotId() {
+	const raw = window.__settings ? window.__settings.slotId : null;
+	if (raw === null || raw === undefined || raw === '') return null;
+	const n = Number(raw);
+	return Number.isInteger(n) && n >= 0 ? n : null;
+}
 
 /** Capitalise the first letter of a string */
 export function capitalise(s) {

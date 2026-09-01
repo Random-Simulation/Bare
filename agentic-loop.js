@@ -45,7 +45,7 @@ export async function loadTools() {
 /* ------------------------------------------------------------------ */
 /* Agentic Loop — the main send() function                            */
 /* ------------------------------------------------------------------ */
-export async function send({ history, queuedMessages, chat, prompt, stopBtn, text, displayText, images, isStreaming, setIsStreaming, requestStop, scrollToBottom, addMsg }) {
+export async function send({ history, queuedMessages, chat, prompt, stopBtn, text, displayText, images, isStreaming, setIsStreaming, requestStop, scrollToBottom, addMsg, onQueueDrained }) {
   const promptText = text ?? prompt.value.trim();
   if (!promptText && queuedMessages.length === 0) return;
 
@@ -151,6 +151,10 @@ export async function send({ history, queuedMessages, chat, prompt, stopBtn, tex
         }
       }
       queuedMessages.length = 0;
+      // Let the renderer refresh the prompt buttons (the interrupt button
+      // shows while a message is queued; once it's injected, the stop
+      // button should be back).
+      onQueueDrained?.();
     }
 
     /* --- track insertion order for DOM placement --- */

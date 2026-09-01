@@ -20,13 +20,21 @@ const prompt = document.getElementById('prompt');
 
 const stopBtn = document.createElement('button');
 stopBtn.id = 'stop-btn';
-stopBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M17 4h-10a3 3 0 0 0 -3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3 -3v-10a3 3 0 0 0 -3 -3z"/></svg>`;
+stopBtn.title = 'Stop agent';
+stopBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="23" height="23" viewBox="0 0 24 24" fill="currentColor"><path d="M17 4h-10a3 3 0 0 0 -3 3v10a3 3 0 0 0 3 3h10a3 3 0 0 0 3 -3v-10a3 3 0 0 0 -3 -3z"/></svg>`;
 document.getElementById('prompt-wrapper').appendChild(stopBtn);
 
 const submitBtn = document.createElement('button');
 submitBtn.id = 'submit-btn';
-submitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M16 9l-4 -4"/><path d="M8 9l4 -4"/></svg>`;
+submitBtn.title = 'Send prompt';
+submitBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path stroke="none" d="M0 0h24v24H0z" fill="none"/><path d="M12 5l0 14"/><path d="M16 9l-4 -4"/><path d="M8 9l4 -4"/></svg>`;
 document.getElementById('prompt-wrapper').appendChild(submitBtn);
+
+const interruptBtn = document.createElement('button');
+interruptBtn.id = 'interrupt-btn';
+interruptBtn.title = 'Interrupt agent';
+interruptBtn.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="23" height="23" viewBox="0 0 24 24" fill="currentColor"><path stroke="none" d="M0 0h24v24H0z" fill="none" /><path d="M14.897 1a4 4 0 0 1 2.664 1.016l.165 .156l4.1 4.1a4 4 0 0 1 1.168 2.605l.006 .227v5.794a4 4 0 0 1 -1.016 2.664l-.156 .165l-4.1 4.1a4 4 0 0 1 -2.603 1.168l-.227 .006h-5.795a3.999 3.999 0 0 1 -2.664 -1.017l-.165 -.156l-4.1 -4.1a4 4 0 0 1 -1.168 -2.604l-.006 -.227v-5.794a4 4 0 0 1 1.016 -2.664l.156 -.165l4.1 -4.1a4 4 0 0 1 2.605 -1.168l.227 -.006h5.793zm-2.887 14l-.127 .007a1 1 0 0 0 0 1.986l.117 .007l.127 -.007a1 1 0 0 0 0 -1.986l-.117 -.007zm-.01 -8a1 1 0 0 0 -.993 .883l-.007 .117v4l.007 .117a1 1 0 0 0 1.986 0l.007 -.117v-4l-.007 -.117a1 1 0 0 0 -.993 -.883z" /></svg>`;
+document.getElementById('prompt-wrapper').appendChild(interruptBtn);
 
 /* ------------------------------------------------------------------ */
 /* State                                                               */
@@ -59,14 +67,26 @@ Object.defineProperty(window, '__isStreaming', {
 function updateButtonVisibility() {
   const hasInput = prompt.value.trim().length > 0 || pendingAttachments.length > 0;
   if (isStreaming) {
-    stopBtn.classList.add('visible');
-    submitBtn.classList.remove('visible');
+    // While a message is queued during generation, show the interrupt button
+    // in place of the stop button so the queued message can be sent now.
+    // (Escape still stops generation at any time.)
+    if (queuedMessages.length > 0) {
+      interruptBtn.classList.add('visible');
+      stopBtn.classList.remove('visible');
+      submitBtn.classList.remove('visible');
+    } else {
+      stopBtn.classList.add('visible');
+      interruptBtn.classList.remove('visible');
+      submitBtn.classList.remove('visible');
+    }
   } else if (hasInput) {
     submitBtn.classList.add('visible');
     stopBtn.classList.remove('visible');
+    interruptBtn.classList.remove('visible');
   } else {
     submitBtn.classList.remove('visible');
     stopBtn.classList.remove('visible');
+    interruptBtn.classList.remove('visible');
   }
 }
 
@@ -82,10 +102,21 @@ submitBtn.addEventListener('click', () => {
 /* ------------------------------------------------------------------ */
 stopBtn.addEventListener('click', () => { if (isStreaming) doRequestStop(); });
 
+interruptBtn.addEventListener('click', () => {
+  if (isStreaming && queuedMessages.length > 0) {
+    // Swap the buttons immediately for feedback; the agentic loop keeps
+    // running and injects the queued message at the top of the next turn.
+    interruptBtn.classList.remove('visible');
+    stopBtn.classList.add('visible');
+    interruptForInjection();
+  }
+});
+
 function requestStop() {
   isStreaming = false;
   applyPendingVerboseMode();
   stopBtn.classList.remove('visible');
+  interruptBtn.classList.remove('visible');
   clearPermissionToasts(); // dismiss any pending permission toasts
   if (window.__currentAbort) {
     window.__currentAbort.abort();
@@ -96,8 +127,9 @@ function requestStop() {
 // Steering interrupt: abort the in-flight stream WITHOUT stopping the loop.
 // isStreaming stays true, so agentic-loop detects __abortReason==='interrupt'
 // and salvages the partial turn (text + reasoning) then continues, letting the
-// just-queued message be injected at the top of the next iteration. This is
-// the "press Stop, then send" experience in a single action.
+// queued message be injected at the top of the next iteration. Triggered by
+// the interrupt button (which replaces the stop button while a message is
+// queued); otherwise queued messages simply wait for the turn to end.
 function interruptForInjection() {
   if (window.__currentAbort) {
     window.__abortReason = 'interrupt';
@@ -172,11 +204,11 @@ function submitPrompt() {
   pendingAttachments.length = 0;
 
   if (isStreaming) {
+    // Queue the message: it is injected at the start of the next LLM turn.
+    // The interrupt button (shown in place of the stop button) lets the user
+    // send it immediately if they don't want to wait.
     queuedMessages.push({ text: fullText, displayText, images });
     addMsg('user', displayText);
-    // Interrupt the in-flight stream so this message is injected NOW
-    // (stop-then-submit semantics) instead of waiting for the turn to end.
-    interruptForInjection();
     prompt.value = '';
     prompt.style.height = 'auto';
     updateButtonVisibility();
@@ -200,11 +232,12 @@ function submitPrompt() {
       requestStop,
       scrollToBottom,
       addMsg,
+      onQueueDrained: updateButtonVisibility,
     }).catch(err => {
       console.error('Uncaught error in agentic loop:', err);
       isStreaming = false;
       applyPendingVerboseMode();
-      stopBtn.classList.remove('visible');
+      updateButtonVisibility();
       const div = document.createElement('div');
       div.className = 'chat-item msg ai markdown-content';
       div.style.color = getComputedStyle(document.documentElement).getPropertyValue('--text-tert').trim();

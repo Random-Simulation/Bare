@@ -82,9 +82,10 @@ export async function getSystemPrompt() {
 	const shellName = shellMatch ? shellMatch[1] : null;
 
 	let rules = `## Rules
-- Work in the current directory. Start with read(.) for agentic work.
+- Work in the current directory.
+- Start with read(.) for agentic work. 
 - Before every tool call, write a very short sentence describing what you are about to do.
-- Keep files <500 lines, single-purpose.
+- Keep files <500 lines, single-purpose in big projects.
 - Batch independent tool calls.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
 - For Math use $/$ KaTeX with LaTeX syntax for all equations.

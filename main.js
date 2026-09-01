@@ -476,6 +476,16 @@ app.whenReady().then(() => {
 		}
 	});
 
+	// The renderer's in-memory state (temp mode, settings panel) is wiped on
+	// any reload/navigation, so the main-process mirror of that state must be
+	// reset too — otherwise the title bar overlay gets stuck on stale colours
+	// (e.g. the temporary-session pink) after Ctrl+R.
+	win.webContents.on("did-start-loading", () => {
+		_settingsOpen = false;
+		_tempMode = false;
+		_applyOverlay(null);
+	});
+
 	// Warm up the Supra title model in a background worker thread (see
 	// title-gen.cjs). Wait until the window has finished loading, then add
 	// a delay, so the native binary load never contends with startup / first
