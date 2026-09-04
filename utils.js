@@ -8,7 +8,7 @@
 
 /**
  * Render markdown text into a DOM element, then post-process with KaTeX
- * to render any math delimiters ($...$, $...$, \(...\), \[...\]).
+ * to render any math delimiters ($...$ display, $...$ inline, \(...\), \[...\]).
  *
  * Does NOT add copy buttons — call addCopyButtons(el) separately after
  * streaming is complete to avoid DOM thrashing / button flicker during
@@ -22,11 +22,12 @@ export function renderMarkdownTo(el, src) {
 		try {
 			window.renderMathInElement(el, {
 				delimiters: [
-					{ left: "$", right: "$", display: true },
-					{ left: "$",  right: "$",  display: false },
-					{ left: "\\(", right: "\\)", display: false },
-					{ left: "\\[", right: "\\]", display: true },
+  				{ left: "$$", right: "$$", display: true },
+    				{ left: "$",  right: "$",  display: false },
+    				{ left: "\\[", right: "\\]", display: true },
+    				{ left: "\\(", right: "\\)", display: false },
 				],
+
 				ignoredTags: ["script", "noscript", "style", "textarea", "pre", "code"],
 				ignoredClasses: ["katex", "katex-display"],
 				throwOnError: false,

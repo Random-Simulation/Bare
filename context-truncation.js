@@ -11,13 +11,21 @@
  *
  * Pass 2+ (context > threshold again):
  *   a) HEAD stays untouched (fixed forever)
- *   b) SKELETON is elided: deleted and replaced by a single
- *      "--- N messages elided ---" marker (written once — later passes
- *      only update its count in place)
- *   c) the old TAIL is promoted to SKELETON (thinking stripped, tool
- *      results stubbed)
+ *   b) the old TAIL is promoted to SKELETON (thinking stripped, tool
+ *      results stubbed) on EVERY pass
+ *   c) on every TRUNC_WIPE_EVERY-th pass the whole SKELETON is ALSO
+ *      elided: deleted and replaced by a single "--- N messages elided
+ *      ---" marker (absorbing any previous marker). Between wipes the
+ *      skeleton grows — stubs accumulate, so historic content stays at
+ *      stub fidelity a few passes longer instead of vanishing.
  *   d) everything appended since the last pass becomes the new TAIL and
  *      is kept exactly as-is
+ *
+ * Wipe rhythm: the in-memory skeletonAge counter tracks advance passes
+ * since the last wipe (the initial split counts as one). On a session
+ * load the counter is reset to 0, so the first truncation after a
+ * reload always preserves (grows) rather than wipes. Forced re-passes
+ * (overflow retries) always collapse the zone and reset the counter.
  *
  * LIVE-TOOL INVARIANT: messages appended after the last pass (the live
  * turn and its tool results) always land in the new tail and are NEVER
@@ -48,6 +56,7 @@ let _state = {
 	headEnd: 0,     // messages [0, headEnd) are HEAD (full, fixed)
 	tailStart: 0,   // messages [tailStart, n) are TAIL (full)
 	lastPassN: 0,   // history length at the time of the last pass
+	skeletonAge: 0,  // advance passes since the last skeleton wipe
 };
 
 /**
@@ -60,11 +69,14 @@ let _state = {
  * @param {Array} [history] - optional message history to restore from
  */
 export function resetTruncationState(history) {
+	// skeletonAge starts at 0 on (re)load: the first truncation after a
+	// reload preserves (grows) the skeleton instead of wiping it.
 	_state = {
 		active: false,
 		headEnd: 0,
 		tailStart: 0,
 		lastPassN: history ? history.length : 0,
+		skeletonAge: 0,
 	};
 
 	if (!history || history.length === 0) return;
@@ -88,12 +100,16 @@ export function resetTruncationState(history) {
 	// zone and the last group is unmarked full content saved mid-session.
 	// Treating it as "new tail" keeps it (and the last turn) intact until
 	// the model has had a pass to use them; it converges on later passes.
+	//
+	// skeletonAge stays 0 after a reload: the passes-since-wipe count is
+	// not derivable from history, and 0 means the first truncation after
+	// a reload preserves (grows) the skeleton instead of wiping it.
 	_state.active = true;
 	_state.headEnd = zoneStart;
 	_state.tailStart = tailStart;
 	_state.lastPassN = tailStart;
 
-	console.log(`[TRUNC] Restored state: Head: [0,${zoneStart}), Skeleton: [${zoneStart},${zoneEnd}), Tail: [${tailStart},${history.length})`);
+	console.log(`[TRUNC] Restored state: Head: [0,${zoneStart}), Skeleton: [${zoneStart},${zoneEnd}), Tail: [${tailStart},${history.length}), age: 0`);
 }
 
 /* ------------------------------------------------------------------ */
@@ -145,8 +161,10 @@ function getMessageGroups(history, start, end) {
 /**
  * Elide the marked skeleton zone: delete the contiguous run of marked
  * messages at [headEnd, ...) and insert a single marker in their place.
- * If the zone already begins with a marker (from an earlier pass), its
- * elided count is absorbed so the history always holds exactly one marker.
+ * If the zone already begins with a marker (from an earlier wipe — or
+ * one holding only stubs after a skipped wipe), its elided count is
+ * absorbed so the history always holds exactly one marker.
+ * This IS the wipe step, so it resets the skeletonAge counter.
  *
  * Only the marked run is removed (clamped to tailStart). After a reload
  * (resetTruncationState) the tail anchor can lie beyond the marked zone;
@@ -180,6 +198,7 @@ function elideZone(history) {
 	});
 
 	_state.tailStart = _state.headEnd + 1;
+	_state.skeletonAge = 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -223,9 +242,12 @@ function doInitialSplit(history) {
 	_state.headEnd = headEnd;
 	_state.tailStart = tailStart;
 	_state.lastPassN = n;
+	// The freshly stubbed skeleton counts as one pass since wipe, so the
+	// second truncation overall is the first one that may wipe.
+	_state.skeletonAge = 1;
 
 	console.log(
-		`[TRUNC] Pass 1: split at n=${n}. Head: [0,${headEnd}), Skeleton: [${headEnd},${tailStart}), Tail: [${tailStart},${n})`
+		`[TRUNC] Pass 1: split at n=${n}. Head: [0,${headEnd}), Skeleton: [${headEnd},${tailStart}), Tail: [${tailStart},${n}), age: 1`
 	);
 	return true;
 }
@@ -236,28 +258,47 @@ function doInitialSplit(history) {
 
 /**
  * Normal pass: new messages have arrived since the last pass.
- *   b) elide skeleton -> single marker
- *   c) old tail      -> promoted to skeleton (stubbed in place)
- *   d) new messages  -> new tail, kept exactly as-is (live-turn safe)
+ *   b) old tail     -> promoted to skeleton (stubbed in place) — always
+ *   c) skeleton     -> elided to the single marker, but only on every
+ *      TRUNC_WIPE_EVERY-th pass; otherwise it grows (stubs accumulate)
+ *   d) new messages -> new tail, kept exactly as-is (live-turn safe)
  */
 function advanceZones(history) {
-	// Old tail = [tailStart, lastPassN). It is promoted; everything from
-	// lastPassN onward (appended since) is the new tail and stays untouched.
-	const oldTailLen = _state.lastPassN - _state.tailStart;
+	const wipeEvery = window.BARE.TRUNC_WIPE_EVERY;
+	const wipe = _state.skeletonAge + 1 >= wipeEvery;
+	_state.skeletonAge++;
 
-	elideZone(history);
+	if (wipe) {
+		// Wipe pass: collapse the whole skeleton (marker + stubs) into the
+		// single elide marker, then promote the old tail behind it.
+		// Old tail = [tailStart, lastPassN); everything from lastPassN
+		// onward (appended since) is the new tail and stays untouched.
+		const oldTailLen = _state.lastPassN - _state.tailStart;
 
-	const stubStart = _state.headEnd + 1;
-	const stubEnd = stubStart + oldTailLen;
-	for (let i = stubStart; i < stubEnd; i++) {
-		summarizeInPlace(history[i]);
+		elideZone(history); // also resets _state.skeletonAge
+
+		const stubStart = _state.headEnd + 1;
+		const stubEnd = stubStart + oldTailLen;
+		for (let i = stubStart; i < stubEnd; i++) {
+			summarizeInPlace(history[i]);
+		}
+
+		_state.tailStart = stubEnd;
+	} else {
+		// Grow pass: leave the existing skeleton (marker + earlier stubs)
+		// untouched; just stub the old tail onto it.
+		const oldTailStart = _state.tailStart;
+		for (let i = oldTailStart; i < _state.lastPassN; i++) {
+			summarizeInPlace(history[i]);
+		}
+
+		_state.tailStart = _state.lastPassN;
 	}
 
-	_state.tailStart = stubEnd;
 	_state.lastPassN = history.length;
 
 	console.log(
-		`[TRUNC] Advance: Head: [0,${_state.headEnd}), Skeleton: [${_state.headEnd},${_state.tailStart}), Tail: [${_state.tailStart},${history.length})`
+		`[TRUNC] ${wipe ? 'Wipe' : 'Grow'} (age ${_state.skeletonAge}/${wipeEvery}): Head: [0,${_state.headEnd}), Skeleton: [${_state.headEnd},${_state.tailStart}), Tail: [${_state.tailStart},${history.length})`
 	);
 	return true;
 }
