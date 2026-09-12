@@ -12,6 +12,9 @@ full_session.json
 system-prompt-addition.md
 # Note: tool-plugin-template.js is intentionally NOT ignored — it's bundled and copied to AppData on first launch
 
+# Local model files
+assets/models/*.gguf
+
 # Environment
 .env
 
