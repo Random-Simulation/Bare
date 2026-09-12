@@ -578,6 +578,26 @@ body {
   display: block;
 }
 
+/* Generic tool blocks (bash etc.) — expandable command view */
+.generic-tool-block summary {
+  word-break: break-word;
+}
+
+/* No command arg (plugin tools) — nothing to expand */
+.generic-tool-block.no-expand summary::before { display: none; }
+.generic-tool-block.no-expand summary { cursor: default; }
+
+.generic-tool-block .tool-content code {
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", monospace;
+  font-size: 12px;
+  color: var(--text-tert);
+  line-height: 1.5;
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+  display: block;
+}
+
 
 /* ═══════════════════════════════════════════
    Expand Animations
@@ -1505,7 +1525,7 @@ kbd.shortcut-badge {
   position: fixed;
   top: 50%; left: 50%;
   transform: translate(-50%, -50%);
-  width: 420px; max-height: 50vh;
+  width: 60vw; height: 67vh;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 12px;

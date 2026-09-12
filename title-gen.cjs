@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* SupraTitle-50M local CPU title generator                           */
+/* Chat-Titles-230M local CPU title generator                        */
 /*                                                                    */
 /* The GGUF model is loaded and run in a dedicated worker thread      */
 /* (see title-model-worker.cjs). This module only spawns the worker,  */
@@ -10,7 +10,7 @@
 const path = require("path");
 const { Worker } = require("worker_threads");
 
-const MODEL_PATH = path.join(__dirname, "assets", "models", "SupraTitle-50M-Q8_0.gguf");
+const MODEL_PATH = path.join(__dirname, "assets", "models", "Chat-Titles-230M-q8_0.gguf");
 const WORKER_PATH = path.join(__dirname, "title-model-worker.cjs");
 
 // First load also pulls in the native binary — be generous.

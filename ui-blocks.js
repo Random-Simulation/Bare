@@ -382,29 +382,63 @@ export function completeWebSearchBlock(block, success) {
 // Generic Tool-Call Blocks
 // ═══════════════════════════════════════════════════════════
 
-/** Create a generic tool-call block (div-based, like read/websearch) */
+/** Create a generic tool-call block (expandable, like write) */
 export function createGenericToolBlock(toolName, statusText) {
-	const div = document.createElement("div");
-	div.className = "chat-item tool-call generic-tool-block pulsing";
-	div.dataset.tool = toolName;
-	div.textContent = statusText;
-	return { el: div, toolName };
+	const details = document.createElement("details");
+	details.className = "chat-item tool-call generic-tool-block pulsing";
+	details.dataset.tool = toolName;
+
+	const summary = document.createElement("summary");
+	summary.textContent = statusText;
+
+	const content = document.createElement("div");
+	content.className = "tool-content";
+
+	const code = document.createElement("code");
+	code.className = "tool-output";
+	content.appendChild(code);
+
+	details.append(summary, content);
+
+	const block = {
+		el: details, details, summary, code, toolName,
+		_rawContent: "",
+		_isOpen: false
+	};
+
+	setupLazyToggle(details, block, code);
+
+	return block;
 }
 
 /** Complete a generic tool-call block */
 export function completeGenericToolBlock(block, success, output, command = "") {
-	block.el.classList.remove("pulsing");
+	block.details.classList.remove("pulsing");
+
+	const hasCommand = !!command;
+	if (hasCommand) {
+		block.details.classList.add("has-command");
+		block._rawContent = command;
+	} else {
+		// Nothing to expand — hide the chevron and disable the toggle
+		block.details.classList.add("no-expand");
+		block.summary.addEventListener("click", (e) => e.preventDefault());
+	}
 
 	if (success) {
 		const displayName = capitalise(block.toolName);
 		if (block.toolName === "bash") {
-			const cmdStr = command || "";
-			const truncated = cmdStr.length > 50 ? cmdStr.substring(0, 50) + "..." : cmdStr;
-			block.el.textContent = `bash: $ ${truncated}`;
+			const truncated = command.length > 50 ? command.substring(0, 50) + "..." : command;
+			block.summary.textContent = `bash: $ ${truncated}`;
 		} else {
-			block.el.textContent = displayName;
+			block.summary.textContent = displayName;
 		}
 	} else {
-		block.el.textContent = `${capitalise(block.toolName)} failed`;
+		block.summary.textContent = `${capitalise(block.toolName)} failed`;
+	}
+
+	// Only hit the DOM if it's currently open
+	if (block._isOpen && hasCommand) {
+		renderLazyContent(block, block.code);
 	}
 }

@@ -113,7 +113,9 @@ export const GENERIC_HANDLER = {
 	update: (uiBlock, entry) => {
 		const partialCommand = extractPartialValue(entry, 'command');
 		if (partialCommand && uiBlock.block) {
-			uiBlock.block.el.textContent = `running $ ${trunc(partialCommand)}`;
+			uiBlock.block.summary.textContent = `running $ ${trunc(partialCommand)}`;
+			uiBlock.block._rawContent = partialCommand;
+			if (uiBlock.block._isOpen) renderLazyContent(uiBlock.block, uiBlock.block.code);
 		}
 		if (partialCommand && uiBlock?.quiet) {
 			showQuietStatus(`running $ ${trunc(partialCommand)}`);
@@ -122,14 +124,16 @@ export const GENERIC_HANDLER = {
 
 	complete: (uiBlock, result, tc) => {
 		const command = tc?.args?.command || '';
-		logToolCall(tc?.name || 'unknown', tc?.args, result, null, { command });
+		const toolOpen = uiBlock?.block?.details?.open || false;
+		logToolCall(tc?.name || 'unknown', tc?.args, result, null, { command, toolOpen });
 		if (uiBlock?.block) completeGenericToolBlock(uiBlock.block, true, result, command);
 		if (uiBlock?.quiet) hideQuietStatus();
 	},
 
 	completeError: (uiBlock, error, tc) => {
-		logToolCall(tc?.name || 'unknown', tc?.args, null, error);
-		if (uiBlock?.block) completeGenericToolBlock(uiBlock.block, false, null);
+		const toolOpen = uiBlock?.block?.details?.open || false;
+		logToolCall(tc?.name || 'unknown', tc?.args, null, error, { toolOpen });
+		if (uiBlock?.block) completeGenericToolBlock(uiBlock.block, false, null, tc?.args?.command);
 		if (uiBlock?.quiet) hideQuietStatus();
 	}
 };

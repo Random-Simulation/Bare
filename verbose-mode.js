@@ -270,6 +270,7 @@ function createToolBlockFromLog(evt) {
 		case 'bash': {
 			const block = createGenericToolBlock('bash', 'Running...');
 			completeGenericToolBlock(block, isOk, evt.result, evt.args?.command);
+			restoreGenericOpen(block, evt);
 			return block.el;
 		}
 
@@ -288,8 +289,18 @@ function createToolBlockFromLog(evt) {
 		default: {
 			const block = createGenericToolBlock(name, `${capitalise(name)}...`);
 			completeGenericToolBlock(block, isOk, evt.result, evt.args?.command);
+			restoreGenericOpen(block, evt);
 			return block.el;
 		}
+	}
+}
+
+/** Restore expanded state for a re-rendered generic tool block */
+function restoreGenericOpen(block, evt) {
+	if (evt.toolOpen && block._rawContent) {
+		block.details.open = true;
+		block._isOpen = true;
+		renderLazyContent(block, block.code);
 	}
 }
 

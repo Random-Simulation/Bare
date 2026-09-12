@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* Worker thread that hosts the SupraTitle-50M model.                 */
+/* Worker thread that hosts the Chat-Titles-230M model.              */
 /*                                                                    */
 /* All llama.cpp native work (native binary load, GGUF parse,         */
 /* context creation, token generation) runs in THIS thread so the     */
@@ -23,9 +23,12 @@ function send(msg) {
 }
 
 async function setup() {
-  console.log("[title-worker] Loading SupraTitle-50M from:", MODEL_PATH);
+  console.log("[title-worker] Loading Chat-Titles-230M from:", MODEL_PATH);
   const { getLlama, LlamaCompletion } = await import("node-llama-cpp");
-  const llama = await getLlama({ logLevel: "error" });
+  // Force CPU-only (gpu: false). This 50M model takes ~50 ms on CPU, but
+  // the default getLlama() picks a GPU backend (CUDA/Vulkan), which opens
+  // a GPU context and reserves ~100-200 MB of VRAM for no benefit.
+  const llama = await getLlama({ logLevel: "error", gpu: false });
   const model = await llama.loadModel({ modelPath: MODEL_PATH });
   // Titles are tiny (short prompt + ~10 output tokens), so a 512-token
   // context keeps KV allocation fast and RAM usage low.
@@ -37,11 +40,11 @@ async function setup() {
 async function generate(message) {
   const prompt = `User: ${message}\nTitle: `;
   const title = await _completion.generateCompletion(prompt, {
-    maxTokens: 10,
-    temperature: 0.55,
-    topK: 15,
+    maxTokens: 20,
+    temperature: 0.1,
+    topK: 50,
     topP: 0.85,
-    repeatPenalty: { lastTokens: 64, penalty: 1.35 },
+    repeatPenalty: { lastTokens: 64, penalty: 1.05 },
     trimWhitespaceSuffix: true,
   });
   // Clean up: trim, drop trailing punctuation/newlines

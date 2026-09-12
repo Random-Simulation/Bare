@@ -83,8 +83,8 @@ export async function getSystemPrompt() {
 
 	let rules = `## Rules
 - Work in the current directory.
-- Start with read(.) for agentic work. 
-- Before every tool call, write a very short sentence describing what you are about to do.
+- Before every tool call, write a very short sentence describing what you are about to do, 5-10 words.
+- After getting tool results, write a very short describing the results, 5-10 words.
 - Keep files <500 lines, single-purpose in big projects.
 - Batch independent tool calls.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}

@@ -32,7 +32,6 @@ const sharedDefaults = {
 	protectedPaths: [
 		'.env',
 		'.git/',
-		'node_modules/',
 		'.gitconfig',
 		'.npmrc',
 		'.yarnrc',
@@ -152,11 +151,27 @@ function checkCommand(command) {
 		return 'Blocked: dangerous command targets drive root';
 	}
 
-	// Check against both protected and blocked paths
-	const all = [...r.protectedPaths, ...r.blockedPaths];
-	for (const p of all) {
-		if (normalized.includes(normalize(p))) {
+	// Read-only commands may inspect protected paths (e.g. dir .env, type .git\config).
+	// Only allowed when the command is a single read-only command with no
+	// chaining or redirection (no & | ; < >) so it can't be combined with writes.
+	const readOnlyCommands = isWindows
+		? ['dir', 'type', 'findstr', 'find', 'tree', 'fc', 'where', 'more']
+		: ['ls', 'cat', 'grep', 'egrep', 'head', 'tail', 'less', 'more', 'wc', 'file', 'stat'];
+	const firstToken = command.trim().split(/[^a-z]+/i).find(t => t) || '';
+	const isReadOnlyCommand = readOnlyCommands.includes(firstToken.toLowerCase())
+		&& !/[&|<>;]/.test(command);
+
+	// protectedPaths: block unless the command is purely read-only
+	for (const p of r.protectedPaths) {
+		if (!isReadOnlyCommand && normalized.includes(normalize(p))) {
 			return `Blocked: command targets protected path '${p}'`;
+		}
+	}
+
+	// blockedPaths: always block, even for read-only commands
+	for (const p of r.blockedPaths) {
+		if (normalized.includes(normalize(p))) {
+			return `Blocked: command targets blocked path '${p}'`;
 		}
 	}
 	return null;
