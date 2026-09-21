@@ -228,7 +228,7 @@ export function buildAssistantContent(text, thinkText) {
 /** Truncate tool output to fit context window, keeping start + end lines */
 export function truncateToolOutput(content, isRead = false) {
 	if (typeof content !== 'string') return content;
-	const MAX_CHARS = isRead ? 100000 : 10000;
+	const MAX_CHARS = isRead ? 500000 : 10000; // [TEST] raised read cap 100k->500k to test large-image truncation; revert to 100000 after confirming
 	const KEEP_START = isRead ? 1000 : 100;
 	const KEEP_END = isRead ? 1000 : 100;
 

@@ -1,12 +1,3 @@
-// Shell-specific command examples for the system prompt
-const SHELL_CMDS = {
-	'cmd.exe':  '`dir`, `copy`, `del`, `xcopy`, etc.',
-	powershell: '`Get-ChildItem`, `Copy-Item`, `Remove-Item`, etc.',
-	bash:       '`ls`, `cp`, `rm`, `mv`, etc.',
-	zsh:        '`ls`, `cp`, `rm`, `mv`, etc.',
-	fish:       '`ls`, `cp`, `rm`, `mv`, etc.',
-};
-
 let _platform = 'Windows (cmd.exe)'; // fallback
 let _ready = null;
 
@@ -38,17 +29,6 @@ async function getPromptAddition() {
 	return _promptAddition;
 }
 
-/** Shell-specific command guidance for the system prompt */
-function getShellRules(shellName) {
-	if (!shellName || !SHELL_CMDS[shellName]) return [];
-	const rules = [`- Shell commands (${shellName}): ${SHELL_CMDS[shellName]}. The bash tool returns combined stdout+stderr.`];
-	if (shellName === 'cmd.exe') {
-		rules.push('- Keep bash commands single-line where possible (cmd.exe syntax: dir, findstr, %VAR%, 2>nul).');
-		rules.push('- For multi-line programs (python, node, etc.), write the code to a file first, then run that file — more reliable and easier to debug than inlining. Inline multi-line is also supported.');
-	}
-	return rules;
-}
-
 /** Build dynamic safety rules based on current settings */
 function getSafetyRules() {
 	const rules = [];
@@ -77,26 +57,17 @@ export async function getSystemPrompt() {
 		workDirLine = `\n\n## Working Directory\n${workDir}\n\nAll file paths are relative to this directory.`;
 	}
 
-	// Extract shell name from platform string like "Windows (cmd.exe)"
-	const shellMatch = platform.match(/\(([^)]+)\)/);
-	const shellName = shellMatch ? shellMatch[1] : null;
-
 	let rules = `## Rules
-- Work in the current directory.
-- Before every tool call, write a very short sentence describing what you are about to do, 5-10 words.
-- After getting tool results, write a very short describing the results, 5-10 words.
+- Briefly narrate what you are doing when using tools.
 - Keep files <500 lines, single-purpose in big projects.
 - Batch independent tool calls.
 - To instantly add a new tool: read the template at {{TOOL_TEMPLATE_PATH}}
 - For Math use $/$ KaTeX with LaTeX syntax for all equations.
 - On task completion: brief summary, then call finish_task.`;
 
-	const shellRules = getShellRules(shellName);
-	if (shellRules.length) rules += '\n' + shellRules.join('\n');
-
 	if (safetyRules.length > 0) {
 		rules += '\n\n## Active Safety Restrictions\n' + safetyRules.join('\n');
 	}
 
-	return `${addition.replace('system agent', platform + ' desktop agent')}.${workDirLine}\n\n${rules}`;
+	return `${addition.replace('system agent', platform + ' desktop agent')}${workDirLine}\n\n${rules}`;
 }
