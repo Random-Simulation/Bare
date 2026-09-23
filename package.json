@@ -20,6 +20,7 @@
     ],
     "files": [
       "**/*",
+      "assets/models/**/*.gguf",
       "!node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!tests/**/*"
     ],

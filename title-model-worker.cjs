@@ -1,5 +1,5 @@
 /* ------------------------------------------------------------------ */
-/* Worker thread that hosts the Chat-Titles-230M model.              */
+/* Worker thread that hosts the SupraTitle-50M model.                */
 /*                                                                    */
 /* All llama.cpp native work (native binary load, GGUF parse,         */
 /* context creation, token generation) runs in THIS thread so the     */
@@ -23,7 +23,7 @@ function send(msg) {
 }
 
 async function setup() {
-  console.log("[title-worker] Loading Chat-Titles-230M from:", MODEL_PATH);
+  console.log("[title-worker] Loading SupraTitle-50M from:", MODEL_PATH);
   const { getLlama, LlamaCompletion } = await import("node-llama-cpp");
   // Force CPU-only (gpu: false). This 50M model takes ~50 ms on CPU, but
   // the default getLlama() picks a GPU backend (CUDA/Vulkan), which opens

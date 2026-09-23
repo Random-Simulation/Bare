@@ -25,8 +25,11 @@ function loadApiConfig(settingsFile) {
 				host: s.serverHost || "127.0.0.1",
 				port: s.serverPort || "8080",
 				model: s.model || "",
-				// Optional slot pin for shared servers — see getBodyExtras() in utils.js
-				slotId: (s.slotId != null && s.slotId !== '' && Number.isInteger(Number(s.slotId))) ? Number(s.slotId) : undefined,
+				// Slot pin for shared servers: run on the slot AFTER the one bare.json
+				// assigns to the main conversation (slotId + 1), so websearch
+				// summarization doesn't evict the chat's KV cache. When bare.json
+				// doesn't specify a slot, leave it unpinned and let the server decide.
+				slotId: (s.slotId != null && s.slotId !== '' && Number.isInteger(Number(s.slotId))) ? Number(s.slotId) + 1 : undefined,
 			};
 		}
 	} catch { /* ignore */ }

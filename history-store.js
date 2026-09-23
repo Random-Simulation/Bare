@@ -17,7 +17,7 @@ export function shouldSkipTitle(text) {
  * Generate a title for a new chat — local CPU first, HTTP fallback.
  */
 export async function generateTitle(firstUserMessage) {
-	// ── Try local Chat-Titles-230M CPU model first ──
+	// ── Try local SupraTitle-50M CPU model first ──
 	try {
 		const title = await window.electron.invoke('title:generate', firstUserMessage);
 		if (title && title !== 'Untitled Chat') return title;
